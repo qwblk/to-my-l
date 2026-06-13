@@ -1,0 +1,1137 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "to-my-l API",
+    "version": "2.1.0",
+    "description": "Two-person private app"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8081",
+      "description": "Local"
+    }
+  ],
+  "security": [
+    {
+      "SaToken": []
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "SaToken": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "Authorization",
+        "description": "Login token (no Bearer prefix)"
+      }
+    },
+    "schemas": {
+      "SaResult": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "example": 200
+          },
+          "msg": {
+            "type": "string",
+            "example": "success"
+          },
+          "data": {
+            "type": "object"
+          }
+        }
+      },
+      "Result": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "example": 200
+          },
+          "msg": {
+            "type": "string",
+            "example": "success"
+          },
+          "data": {}
+        }
+      },
+      "UserLoginRequest": {
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "properties": {
+          "username": {
+            "type": "string",
+            "example": "alice"
+          },
+          "password": {
+            "type": "string",
+            "example": "123456"
+          }
+        }
+      },
+      "LoginResponse": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "example": "token..."
+          },
+          "firstLogin": {
+            "type": "boolean",
+            "example": true
+          },
+          "greeting": {
+            "type": "string",
+            "example": "Welcome..."
+          }
+        }
+      },
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "name": {
+            "type": "string"
+          },
+          "gender": {
+            "type": "integer",
+            "description": "0=F 1=M"
+          },
+          "username": {
+            "type": "string"
+          },
+          "birthday": {
+            "type": "string",
+            "format": "date"
+          },
+          "age": {
+            "type": "integer"
+          },
+          "bio": {
+            "type": "string"
+          },
+          "isFirstLogin": {
+            "type": "integer"
+          },
+          "createTime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updateTime": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "UpdatePasswordRequest": {
+        "type": "object",
+        "required": [
+          "oldPassword",
+          "newPassword"
+        ],
+        "properties": {
+          "oldPassword": {
+            "type": "string",
+            "example": "123456"
+          },
+          "newPassword": {
+            "type": "string",
+            "example": "newpass",
+            "minLength": 6
+          }
+        }
+      },
+      "UpdateInfoRequest": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Alice"
+          },
+          "gender": {
+            "type": "integer",
+            "example": 0
+          },
+          "birthday": {
+            "type": "string",
+            "format": "date",
+            "example": "1995-06-15"
+          },
+          "bio": {
+            "type": "string",
+            "example": "I love cats..."
+          }
+        }
+      },
+      "UploadResponse": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "example": "/uploads/images/20260613/abc.jpg"
+          },
+          "size": {
+            "type": "integer",
+            "example": 204800
+          },
+          "type": {
+            "type": "string",
+            "example": "image/jpeg"
+          }
+        }
+      },
+      "DiaryCreateRequest": {
+        "type": "object",
+        "required": [
+          "title",
+          "content"
+        ],
+        "properties": {
+          "title": {
+            "type": "string",
+            "example": "A good day"
+          },
+          "content": {
+            "type": "string"
+          },
+          "mood": {
+            "type": "string",
+            "example": "happy"
+          },
+          "weather": {
+            "type": "string",
+            "example": "sunny"
+          },
+          "isPrivate": {
+            "type": "integer",
+            "example": 0
+          }
+        }
+      },
+      "Diary": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "userId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "title": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "mood": {
+            "type": "string"
+          },
+          "weather": {
+            "type": "string"
+          },
+          "isPrivate": {
+            "type": "integer"
+          },
+          "createTime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "userName": {
+            "type": "string"
+          }
+        }
+      },
+      "MomentCreateRequest": {
+        "type": "object",
+        "required": [
+          "content"
+        ],
+        "properties": {
+          "content": {
+            "type": "string",
+            "example": "Beautiful sunset!"
+          },
+          "image": {
+            "type": "string",
+            "example": "https://..."
+          }
+        }
+      },
+      "Moment": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "userId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "content": {
+            "type": "string"
+          },
+          "image": {
+            "type": "string"
+          },
+          "createTime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "userName": {
+            "type": "string"
+          },
+          "likes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MomentLike"
+            }
+          },
+          "comments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MomentComment"
+            }
+          },
+          "likeCount": {
+            "type": "integer"
+          }
+        }
+      },
+      "MomentCommentRequest": {
+        "type": "object",
+        "required": [
+          "content"
+        ],
+        "properties": {
+          "content": {
+            "type": "string",
+            "example": "Nice!"
+          }
+        }
+      },
+      "MomentLike": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "momentId": {
+            "type": "integer"
+          },
+          "userId": {
+            "type": "integer"
+          },
+          "userName": {
+            "type": "string"
+          },
+          "createTime": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "MomentComment": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "momentId": {
+            "type": "integer"
+          },
+          "userId": {
+            "type": "integer"
+          },
+          "content": {
+            "type": "string"
+          },
+          "userName": {
+            "type": "string"
+          },
+          "createTime": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "MessageSendRequest": {
+        "type": "object",
+        "required": [
+          "receiverId",
+          "content"
+        ],
+        "properties": {
+          "receiverId": {
+            "type": "integer",
+            "description": "1=Alice 2=Bob",
+            "example": 2
+          },
+          "content": {
+            "type": "string",
+            "example": "See you!"
+          }
+        }
+      },
+      "Message": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "senderId": {
+            "type": "integer"
+          },
+          "receiverId": {
+            "type": "integer"
+          },
+          "content": {
+            "type": "string"
+          },
+          "isRead": {
+            "type": "integer",
+            "description": "0=unread 1=read"
+          },
+          "senderName": {
+            "type": "string"
+          },
+          "createTime": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/user/login": {
+      "post": {
+        "tags": [
+          "User"
+        ],
+        "summary": "Login",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserLoginRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Token + firstLogin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {},
+                    "msg": {},
+                    "data": {
+                      "$ref": "#/components/schemas/LoginResponse"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid credentials"
+          }
+        }
+      }
+    },
+    "/user/logout": {
+      "post": {
+        "tags": [
+          "User"
+        ],
+        "summary": "Logout",
+        "responses": {
+          "200": {
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/user/me": {
+      "get": {
+        "tags": [
+          "User"
+        ],
+        "summary": "Current user",
+        "responses": {
+          "200": {
+            "description": "User",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {},
+                    "msg": {},
+                    "data": {
+                      "$ref": "#/components/schemas/User"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/user/{id}": {
+      "get": {
+        "tags": [
+          "User"
+        ],
+        "summary": "Get user by ID",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "example": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {},
+                    "msg": {},
+                    "data": {
+                      "$ref": "#/components/schemas/User"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/user/list": {
+      "get": {
+        "tags": [
+          "User"
+        ],
+        "summary": "List all users",
+        "responses": {
+          "200": {
+            "description": "User list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/User"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/user/password": {
+      "put": {
+        "tags": [
+          "User"
+        ],
+        "summary": "Change password",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePasswordRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "ok"
+          },
+          "400": {
+            "description": "Old password wrong / new < 6 chars"
+          }
+        }
+      }
+    },
+    "/user/info": {
+      "put": {
+        "tags": [
+          "User"
+        ],
+        "summary": "Update info",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateInfoRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {},
+                    "msg": {},
+                    "data": {
+                      "$ref": "#/components/schemas/User"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/upload": {
+      "post": {
+        "tags": [
+          "Upload"
+        ],
+        "summary": "Upload image/video",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "jpg/png/gif/webp/svg/mp4/webm/ogg, max 50MB"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "File URL",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {},
+                    "msg": {},
+                    "data": {
+                      "$ref": "#/components/schemas/UploadResponse"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid type or size"
+          }
+        }
+      }
+    },
+    "/diary": {
+      "post": {
+        "tags": [
+          "Diary"
+        ],
+        "summary": "Create diary",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiaryCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {},
+                    "msg": {},
+                    "data": {
+                      "$ref": "#/components/schemas/Diary"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/diary/all": {
+      "get": {
+        "tags": [
+          "Diary"
+        ],
+        "summary": "List all (private filtered)",
+        "responses": {
+          "200": {
+            "description": "Diary list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Diary"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/diary/mine": {
+      "get": {
+        "tags": [
+          "Diary"
+        ],
+        "summary": "My diaries",
+        "responses": {
+          "200": {
+            "description": "My diaries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Diary"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/moment": {
+      "post": {
+        "tags": [
+          "Moment"
+        ],
+        "summary": "Create moment",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MomentCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {},
+                    "msg": {},
+                    "data": {
+                      "$ref": "#/components/schemas/Moment"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/moment/all": {
+      "get": {
+        "tags": [
+          "Moment"
+        ],
+        "summary": "List all",
+        "responses": {
+          "200": {
+            "description": "Moment list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Moment"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/moment/like/{momentId}": {
+      "post": {
+        "tags": [
+          "Moment"
+        ],
+        "summary": "Toggle like",
+        "parameters": [
+          {
+            "name": "momentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "example": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "true=liked false=unliked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Moment"
+        ],
+        "summary": "Get likes",
+        "parameters": [
+          {
+            "name": "momentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "example": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Like list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/MomentLike"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/moment/comment/{momentId}": {
+      "post": {
+        "tags": [
+          "Moment"
+        ],
+        "summary": "Add comment",
+        "parameters": [
+          {
+            "name": "momentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "example": 1
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MomentCommentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {},
+                    "msg": {},
+                    "data": {
+                      "$ref": "#/components/schemas/MomentComment"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Moment"
+        ],
+        "summary": "Get comments",
+        "parameters": [
+          {
+            "name": "momentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "example": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Comment list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/MomentComment"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/message": {
+      "post": {
+        "tags": [
+          "Message"
+        ],
+        "summary": "Send message",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MessageSendRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sent",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {},
+                    "msg": {},
+                    "data": {
+                      "$ref": "#/components/schemas/Message"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/message/received": {
+      "get": {
+        "tags": [
+          "Message"
+        ],
+        "summary": "Messages I received",
+        "responses": {
+          "200": {
+            "description": "Received",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Message"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/message/sent": {
+      "get": {
+        "tags": [
+          "Message"
+        ],
+        "summary": "Messages I sent",
+        "responses": {
+          "200": {
+            "description": "Sent",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Message"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/message/read/{messageId}": {
+      "put": {
+        "tags": [
+          "Message"
+        ],
+        "summary": "Mark as read",
+        "parameters": [
+          {
+            "name": "messageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "example": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/message/unread-count": {
+      "get": {
+        "tags": [
+          "Message"
+        ],
+        "summary": "Unread count",
+        "responses": {
+          "200": {
+            "description": "Count",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "integer",
+                      "example": 3
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chat Room</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f0f0f;color:#e0e0e0;display:flex;justify-content:center;align-items:center;height:100vh}
+#app{width:100%;max-width:720px;height:100vh;display:flex;flex-direction:column;background:#1a1a1a}
+#header{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:#1f1f1f;border-bottom:1px solid #2a2a2a}
+#header h2{font-size:16px;font-weight:600;color:#f0f0f0}
+#partner{display:flex;align-items:center;gap:6px;font-size:12px}
+#partner .p-dot{width:8px;height:8px;border-radius:50%}
+#partner .p-dot.online{background:#4caf50}
+#partner .p-dot.offline{background:#555}
+#partner .p-name{color:#aaa}
+#status{display:flex;align-items:center;gap:6px;font-size:12px;color:#888}
+#status .dot{width:8px;height:8px;border-radius:50%}
+#status .dot.online{background:#4caf50}
+#status .dot.offline{background:#f44336}
+#messages{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:6px}
+#messages::-webkit-scrollbar{width:4px}
+#messages::-webkit-scrollbar-thumb{background:#333;border-radius:2px}
+.msg{max-width:75%;padding:8px 12px;border-radius:12px;font-size:14px;line-height:1.5;word-break:break-word;animation:fadeIn .2s ease}
+.msg.mine{align-self:flex-end;background:#0a6cff;color:#fff;border-bottom-right-radius:4px}
+.msg.other{align-self:flex-start;background:#2a2a2a;color:#ddd;border-bottom-left-radius:4px}
+.msg.system,.msg.events{align-self:center;background:transparent;color:#666;font-size:12px;padding:2px 8px}
+.msg.events{color:#4caf50}
+.msg .sender{font-size:11px;opacity:.7;margin-bottom:2px;display:block}
+.msg .time{font-size:10px;opacity:.5;margin-top:2px;display:block;text-align:right}
+@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+#login-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.8);display:flex;justify-content:center;align-items:center;z-index:10}
+#login-box{background:#1f1f1f;padding:32px;border-radius:12px;width:300px;text-align:center}
+#login-box h3{margin-bottom:20px;color:#f0f0f0}
+#login-box input{width:100%;padding:10px 12px;margin-bottom:12px;border:1px solid #333;border-radius:8px;background:#0f0f0f;color:#e0e0e0;font-size:14px;outline:none}
+#login-box input:focus{border-color:#0a6cff}
+#login-box button{width:100%;padding:10px;border:none;border-radius:8px;background:#0a6cff;color:#fff;font-size:14px;font-weight:600;cursor:pointer}
+#login-box button:hover{background:#0958d9}
+#input-area{display:flex;padding:12px 16px;gap:8px;border-top:1px solid #2a2a2a;background:#1f1f1f}
+#input-area input{flex:1;padding:10px 12px;border:1px solid #333;border-radius:20px;background:#0f0f0f;color:#e0e0e0;font-size:14px;outline:none}
+#input-area input:focus{border-color:#0a6cff}
+#input-area button{width:40px;height:40px;border:none;border-radius:50%;background:#0a6cff;color:#fff;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+#input-area button:hover{background:#0958d9}
+#input-area button svg{width:18px;height:18px;fill:currentColor}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="header">
+    <h2>Chat Room</h2>
+    <div id="partner"><span class="p-dot offline"></span><span class="p-name">Alice/Bob</span></div>
+    <div id="status"><span class="dot offline"></span><span id="status-text">Connecting...</span></div>
+  </div>
+  <div id="messages"></div>
+  <div id="input-area">
+    <input id="msg-input" type="text" placeholder="Type a message..." maxlength="500" autocomplete="off">
+    <button id="send-btn" title="Send">
+      <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+    </button>
+  </div>
+</div>
+
+<div id="login-overlay">
+  <div id="login-box">
+    <h3>Who are you?</h3>
+    <input id="username-input" type="text" placeholder="Alice or Bob" maxlength="20" autocomplete="off">
+    <button id="join-btn">Join</button>
+  </div>
+</div>
+
+<script>
+const HOST = location.host;
+const ALL_USERS = ['Alice', 'Bob'];
+let ws, username;
+
+const $ = sel => document.querySelector(sel);
+
+/* ========== Notification ========== */
+let notifyGranted = false;
+if ('Notification' in window && Notification.permission !== 'denied') {
+  Notification.requestPermission().then(p => { notifyGranted = p === 'granted'; });
+}
+
+function notify(title, body) {
+  if (!notifyGranted || document.hasFocus()) return;
+  try { new Notification(title, { body, icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50" fill="%230a6cff"/></svg>' }); } catch(e) {}
+}
+
+const NOTIFY_TITLES = {
+  chat:    'New chat message',
+  diary:   'New diary posted',
+  moment:  'New moment posted',
+  like:    'Someone liked your moment',
+  comment: 'New comment',
+  message: 'New message',
+  read:    'Message read',
+  online:  'Online',
+  offline: 'Offline'
+};
+
+/* ========== Status helpers ========== */
+function setMyStatus(text, online) {
+  $('#status-text').textContent = text;
+  $('.dot').className = 'dot ' + (online ? 'online' : 'offline');
+}
+
+function setPartnerStatus(name, online) {
+  const dot = $('.p-dot');
+  const nameEl = $('.p-name');
+  if (!name || name === username) return;
+  dot.className = 'p-dot ' + (online ? 'online' : 'offline');
+  nameEl.textContent = name + (online ? ' (online)' : ' (offline)');
+}
+
+function otherUser() {
+  return ALL_USERS.find(u => u !== username) || 'Partner';
+}
+
+/* ========== Messages ========== */
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function addMsg(sender, content, time, type) {
+  const div = document.createElement('div');
+  let cls;
+  if (type === 'system') cls = 'system';
+  else if (type === 'online' || type === 'offline') cls = 'events';
+  else if (sender === username) cls = 'mine';
+  else cls = 'other';
+  div.className = 'msg ' + cls;
+  if (type !== 'system' && type !== 'online' && type !== 'offline') {
+    div.innerHTML = '<span class="sender">' + esc(sender) + '</span>';
+  }
+  div.innerHTML += esc(content);
+  div.innerHTML += '<span class="time">' + time + '</span>';
+  $('#messages').appendChild(div);
+  $('#messages').scrollTop = $('#messages').scrollHeight;
+}
+
+function onMessage(e) {
+  const data = JSON.parse(e.data);
+  const { sender, content, time, type } = data;
+  addMsg(sender, content, time, type);
+
+  /* partner status */
+  if (type === 'history' && data.data && Array.isArray(data.data)) {
+      data.data.forEach(function(m) { addMsg(m.sender, m.content, m.time, m.type); });
+    }
+    if (type === 'online') setPartnerStatus(sender, true);
+    else if (type === 'status' && data.data && data.data.online) {
+      var onlineList = data.data.online.filter(function(u) { return u && u.length > 0; });
+      if (onlineList.length > 0) {
+        onlineList.forEach(function(u) { setPartnerStatus(u, true); });
+      } else {
+        setPartnerStatus(otherUser(), false);
+      }
+    }
+  else if (type === 'offline') setPartnerStatus(sender, false);
+
+  /* desktop notification */
+  if (sender !== username) {
+    const title = NOTIFY_TITLES[type] || 'New notification';
+    notify(title, (type === 'chat' ? sender + ': ' : '') + content);
+  }
+}
+
+/* ========== WebSocket ========== */
+function connect() {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  ws = new WebSocket(proto + '//' + HOST + '/ws/chat?username=' + encodeURIComponent(username));
+  ws.onopen = () => {
+    setMyStatus('Online', true);
+    /* set partner label */
+    $('.p-name').textContent = otherUser() + ' (checking...)';
+  };
+  ws.onclose = () => setMyStatus('Offline', false);
+  ws.onerror = () => setMyStatus('Error', false);
+  ws.onmessage = onMessage;
+}
+
+/* ========== Login ========== */
+$('#join-btn').onclick = () => {
+  const name = $('#username-input').value.trim();
+  if (!name) return;
+  username = name;
+  $('#login-overlay').style.display = 'none';
+  connect();
+};
+$('#username-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') $('#join-btn').click();
+});
+
+/* ========== Send ========== */
+$('#send-btn').onclick = () => {
+  const input = $('#msg-input');
+  const text = input.value.trim();
+  if (!text || !ws || ws.readyState !== WebSocket.OPEN) return;
+  ws.send(text);
+  input.value = '';
+};
+$('#msg-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') $('#send-btn').click();
+});
+</script>
+</body>
+</html>
