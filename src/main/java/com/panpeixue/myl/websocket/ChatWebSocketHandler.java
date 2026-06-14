@@ -5,6 +5,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.panpeixue.myl.mapper.UserMapper;
 import com.panpeixue.myl.model.dto.ChatHistoryResponse;
+import com.panpeixue.myl.model.dto.MomentMedia;
 import com.panpeixue.myl.model.pojo.ChatMessage;
 import com.panpeixue.myl.model.pojo.User;
 import com.panpeixue.myl.service.ChatService;
@@ -32,6 +33,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     private static final DateTimeFormatter dateTimeFmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final String HEART_TOKEN = "__TML_HEART__";
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
+    private static final TypeReference<List<MomentMedia>> MEDIA_LIST_TYPE = new TypeReference<>() {};
 
     private final WebSocketSessionManager sessionManager;
     private final ChatService chatService;
@@ -89,7 +91,8 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                 return;
             }
 
-            ChatMessage saved = chatService.saveChat(sender.getId(), receiver.getId(), incoming.content());
+            ChatMessage saved = chatService.saveChat(sender.getId(), receiver.getId(),
+                incoming.content(), incoming.mediaList());
             String json = buildChatJson(sender, receiver, saved);
             broadcastToPair(sender, receiver, json);
         } catch (IllegalArgumentException e) {
@@ -124,11 +127,14 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     }
 
     private String buildChatJson(User sender, User receiver, ChatMessage saved) {
-        String data = "{\"id\":" + saved.getId()
-            + ",\"senderId\":" + sender.getId()
-            + ",\"receiverId\":" + receiver.getId()
-            + ",\"createTime\":\"" + saved.getCreateTime().format(dateTimeFmt) + "\"}";
-        return buildJson(sender.getName(), saved.getContent(), "chat", data);
+        StringBuilder data = new StringBuilder("{")
+            .append("\"id\":").append(saved.getId())
+            .append(",\"senderId\":").append(sender.getId())
+            .append(",\"receiverId\":").append(receiver.getId())
+            .append(",\"createTime\":\"").append(saved.getCreateTime().format(dateTimeFmt)).append("\"")
+            .append(",\"mediaList\":").append(mediaListJson(saved.getMediaList()))
+            .append("}");
+        return buildJson(sender.getName(), saved.getContent(), "chat", data.toString());
     }
 
     private String buildHeartJson(User sender, User receiver) {
@@ -143,11 +149,26 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             + ",\"receiverId\":" + m.getReceiverId()
             + ",\"senderName\":\"" + esc(m.getSenderName()) + "\""
             + ",\"content\":\"" + esc(m.getContent()) + "\""
-            + ",\"createTime\":\"" + m.getCreateTime().format(dateTimeFmt) + "\"}";
+            + ",\"createTime\":\"" + m.getCreateTime().format(dateTimeFmt) + "\""
+            + ",\"mediaList\":" + mediaListJson(m.getMediaList())
+            + "}";
+    }
+
+    /**
+     * 把 List<MomentMedia> 序列化成 JSON 字符串嵌进广播 / 历史响应里。
+     * 失败时降级成 []，避免单条脏数据让整条 WS 消息坏掉。
+     */
+    private String mediaListJson(List<MomentMedia> list) {
+        if (list == null || list.isEmpty()) return "[]";
+        try {
+            return objectMapper.writeValueAsString(list);
+        } catch (JsonProcessingException e) {
+            return "[]";
+        }
     }
 
     private Incoming parse(String payload) {
-        if (payload == null) return Incoming.chat("");
+        if (payload == null) return Incoming.chat("", null);
         String trimmed = payload.trim();
         if (HEART_TOKEN.equals(trimmed)) return Incoming.heartEvent();
         if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
@@ -155,14 +176,27 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                 Map<String, Object> obj = objectMapper.readValue(trimmed, MAP_TYPE);
                 Object type = obj.get("type");
                 if ("heart".equals(type)) return Incoming.heartEvent();
-                if ("chat".equals(type)) return Incoming.chat(String.valueOf(obj.getOrDefault("content", "")));
+                if ("chat".equals(type)) {
+                    String content = obj.get("content") == null ? "" : String.valueOf(obj.get("content"));
+                    Object rawMedia = obj.get("mediaList");
+                    List<MomentMedia> media = null;
+                    if (rawMedia != null) {
+                        // Map -> POJO 用 convertValue，不用再走一次序列化
+                        media = objectMapper.convertValue(rawMedia, MEDIA_LIST_TYPE);
+                    }
+                    return Incoming.chat(content, media);
+                }
                 throw new IllegalArgumentException("Unsupported chat command type: " + type);
             } catch (JsonProcessingException e) {
                 // JSON 解析失败时按旧前端纯文本处理，最大兼容
-                return Incoming.chat(payload);
+                return Incoming.chat(payload, null);
+            } catch (IllegalArgumentException e) {
+                // convertValue 在结构不对时会抛 IAE：mediaList 字段格式错就直接报错
+                if (e.getMessage() != null && e.getMessage().startsWith("Unsupported chat")) throw e;
+                throw new IllegalArgumentException("Invalid mediaList payload");
             }
         }
-        return Incoming.chat(payload);
+        return Incoming.chat(payload, null);
     }
 
     private User getPartner(Long userId) {
@@ -209,8 +243,10 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         return user == null ? username : user.getName();
     }
 
-    private record Incoming(boolean isHeart, String content) {
-        static Incoming heartEvent() { return new Incoming(true, null); }
-        static Incoming chat(String content) { return new Incoming(false, content); }
+    private record Incoming(boolean isHeart, String content, List<MomentMedia> mediaList) {
+        static Incoming heartEvent() { return new Incoming(true, null, null); }
+        static Incoming chat(String content, List<MomentMedia> mediaList) {
+            return new Incoming(false, content, mediaList);
+        }
     }
 }

@@ -220,6 +220,7 @@ CREATE TABLE `chat_message` (
     `sender_id`   BIGINT   NOT NULL,
     `receiver_id` BIGINT   NOT NULL,
     `content`     TEXT     NOT NULL,
+    `media_list`  TEXT     DEFAULT NULL COMMENT 'JSON 数组，每项 {type:"image"|"video", url, width?, height?, duration?}',
     `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `deleted_at`  DATETIME DEFAULT NULL,
     PRIMARY KEY (`id`),
@@ -235,12 +236,19 @@ CREATE TABLE `chat_message` (
 --     `sender_id`   BIGINT   NOT NULL,
 --     `receiver_id` BIGINT   NOT NULL,
 --     `content`     TEXT     NOT NULL,
+--     `media_list`  TEXT     DEFAULT NULL COMMENT 'JSON 数组，每项 {type:"image"|"video", url, width?, height?, duration?}',
 --     `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 --     `deleted_at`  DATETIME DEFAULT NULL,
 --     PRIMARY KEY (`id`),
 --     KEY `idx_pair_time` (`sender_id`, `receiver_id`, `create_time`, `id`),
 --     KEY `idx_receiver_time` (`receiver_id`, `create_time`, `id`)
 -- ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+--
+-- 如果已经是新版 chat_message，仅需补 media_list 列：
+-- ALTER TABLE `chat_message`
+--     ADD COLUMN `media_list` TEXT DEFAULT NULL
+--         COMMENT 'JSON 数组，每项 {type:"image"|"video", url, width?, height?, duration?}'
+--         AFTER `content`;
 
 INSERT INTO `chat_message` (`sender_id`, `receiver_id`, `content`, `create_time`) VALUES (1, 2, '早啊', '2026-06-13 10:05:00');
 INSERT INTO `chat_message` (`sender_id`, `receiver_id`, `content`, `create_time`) VALUES (2, 1, '早~', '2026-06-13 10:06:00');

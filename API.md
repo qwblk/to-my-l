@@ -402,7 +402,10 @@ data 为 null。
         "receiverId": 2,
         "senderName": "王水群",
         "content": "你好",
-        "createTime": "2026-06-14 22:10:03"
+        "createTime": "2026-06-14 22:10:03",
+        "mediaList": [
+          { "type": "image", "url": "/static/uploads/2026/06/a.jpg", "width": 1024, "height": 768 }
+        ]
       }
     ],
     "nextCursor": "2026-06-12 18:00:00",
@@ -418,6 +421,10 @@ WebSocket 端点：`ws://<host>:8081/ws/chat?username=<username>`（免鉴权，
 前端发送（推荐 JSON）：
 ```jsonc
 { "type": "chat", "content": "你好" }
+{ "type": "chat", "content": "", "mediaList": [
+  { "type": "image", "url": "/static/uploads/2026/06/a.jpg", "width": 1024, "height": 768 },
+  { "type": "video", "url": "/static/uploads/2026/06/b.mp4", "duration": 12.5 }
+] }
 { "type": "heart" }
 ```
 
@@ -425,7 +432,7 @@ WebSocket 端点：`ws://<host>:8081/ws/chat?username=<username>`（免鉴权，
 - 纯文本仍按 `chat` 处理
 - `__TML_HEART__` 识别为 `heart`，不保存、不展示成聊天文本
 
-服务端广播普通聊天：
+服务端广播普通聊天（带或不带 mediaList）：
 ```jsonc
 {
   "sender": "王水群",
@@ -436,10 +443,15 @@ WebSocket 端点：`ws://<host>:8081/ws/chat?username=<username>`（免鉴权，
     "id": 123,
     "senderId": 1,
     "receiverId": 2,
-    "createTime": "2026-06-14 22:10:03"
+    "createTime": "2026-06-14 22:10:03",
+    "mediaList": [
+      { "type": "image", "url": "/static/uploads/2026/06/a.jpg", "width": 1024, "height": 768 }
+    ]
   }
 }
 ```
+
+> 没有图片/视频时 `data.mediaList` 为 `[]`，不会缺字段。
 
 服务端广播心动：
 ```jsonc
@@ -456,9 +468,11 @@ WebSocket 端点：`ws://<host>:8081/ws/chat?username=<username>`（免鉴权，
 ```
 
 规则：
-- `chat`：content trim 后不能为空，长度 ≤ 500；保存 DB 后广播给自己和对方
+- `chat`：`content` trim 后允许空，但**必须 content 或 mediaList 至少有一个**；`content` 长度 ≤ 500
+- `mediaList`：可选，最多 9 个；每项 `type ∈ {"image","video"}`、`url` 必须以 `/static/uploads/` 开头（与 `/moment` 保持同一规则）
+- 校验失败时不会广播给对方，只回发一条 `type: "error"` 给发送方
 - `heart`：不保存 DB，只广播给自己和对方；对方离线时不补发
-- 新连接后会推一条 `history` 事件，`data.messages` 是最近 30 条聊天历史
+- 新连接后会推一条 `history` 事件，`data.messages` 是最近 30 条聊天历史（同样含 `mediaList` 字段）
 
 事件类型 (`type` 字段)：
 - `chat` —— 普通聊天消息
@@ -541,10 +555,17 @@ CREATE TABLE `chat_message` (
   `sender_id`   BIGINT   NOT NULL,
   `receiver_id` BIGINT   NOT NULL,
   `content`     TEXT     NOT NULL,
+  `media_list`  TEXT     DEFAULT NULL COMMENT 'JSON 数组，每项 {type:"image"|"video", url, width?, height?, duration?}',
   `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `deleted_at`  DATETIME DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_pair_time` (`sender_id`, `receiver_id`, `create_time`, `id`),
   KEY `idx_receiver_time` (`receiver_id`, `create_time`, `id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 已经是新版只缺 media_list 时：
+ALTER TABLE `chat_message`
+  ADD COLUMN `media_list` TEXT DEFAULT NULL
+    COMMENT 'JSON 数组，每项 {type:"image"|"video", url, width?, height?, duration?}'
+    AFTER `content`;
 ```

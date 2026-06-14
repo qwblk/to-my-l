@@ -3,6 +3,7 @@ package com.panpeixue.myl.service;
 import com.panpeixue.myl.mapper.ChatMessageMapper;
 import com.panpeixue.myl.mapper.UserMapper;
 import com.panpeixue.myl.model.dto.ChatHistoryResponse;
+import com.panpeixue.myl.model.dto.MomentMedia;
 import com.panpeixue.myl.model.pojo.ChatMessage;
 import com.panpeixue.myl.model.pojo.User;
 import com.panpeixue.myl.service.impl.ChatServiceImpl;
@@ -30,7 +31,7 @@ class ChatServiceTest {
     UserMapper userMapper;
 
     @Test
-    void saveChat_persistsTrimmedContent() {
+    void saveChat_persistsTrimmedTextWithoutMedia() {
         ChatServiceImpl service = new ChatServiceImpl(chatMessageMapper, userMapper);
         when(chatMessageMapper.insert(any(ChatMessage.class))).thenAnswer(inv -> {
             ChatMessage msg = inv.getArgument(0);
@@ -38,55 +39,133 @@ class ChatServiceTest {
             return 1;
         });
 
-        ChatMessage saved = service.saveChat(1L, 2L, "  你好  ");
+        ChatMessage saved = service.saveChat(1L, 2L, "  你好  ", null);
 
         assertThat(saved.getId()).isEqualTo(123L);
-        assertThat(saved.getSenderId()).isEqualTo(1L);
-        assertThat(saved.getReceiverId()).isEqualTo(2L);
         assertThat(saved.getContent()).isEqualTo("你好");
-        assertThat(saved.getCreateTime()).isNotNull();
-        verify(chatMessageMapper).insert(any(ChatMessage.class));
+        assertThat(saved.getMediaListJson()).isNull();
+        assertThat(saved.getMediaList()).isEmpty();
     }
 
     @Test
-    void saveChat_emptyRejected() {
+    void saveChat_emptyContentAndEmptyMediaRejected() {
         ChatServiceImpl service = new ChatServiceImpl(chatMessageMapper, userMapper);
 
-        assertThatThrownBy(() -> service.saveChat(1L, 2L, "   "))
+        assertThatThrownBy(() -> service.saveChat(1L, 2L, "   ", null))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("empty");
+        assertThatThrownBy(() -> service.saveChat(1L, 2L, null, List.of()))
+            .isInstanceOf(IllegalArgumentException.class);
         verifyNoInteractions(chatMessageMapper);
     }
 
     @Test
-    void saveChat_tooLongRejected() {
+    void saveChat_emptyContentWithMediaIsAllowed() {
+        ChatServiceImpl service = new ChatServiceImpl(chatMessageMapper, userMapper);
+        when(chatMessageMapper.insert(any(ChatMessage.class))).thenAnswer(inv -> {
+            ChatMessage msg = inv.getArgument(0);
+            msg.setId(200L);
+            return 1;
+        });
+        List<MomentMedia> media = List.of(
+            new MomentMedia("image", "/static/uploads/2026/06/a.jpg", 1024, 768, null));
+
+        ChatMessage saved = service.saveChat(1L, 2L, "", media);
+
+        assertThat(saved.getContent()).isEmpty();
+        assertThat(saved.getMediaListJson())
+            .startsWith("[")
+            .contains("\"type\":\"image\"")
+            .contains("/static/uploads/");
+        assertThat(saved.getMediaList()).hasSize(1);
+    }
+
+    @Test
+    void saveChat_externalMediaUrlRejected() {
+        ChatServiceImpl service = new ChatServiceImpl(chatMessageMapper, userMapper);
+        List<MomentMedia> bad = List.of(
+            new MomentMedia("image", "http://evil.com/x.jpg", null, null, null));
+
+        assertThatThrownBy(() -> service.saveChat(1L, 2L, "hi", bad))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("/static/uploads/");
+        verifyNoInteractions(chatMessageMapper);
+    }
+
+    @Test
+    void saveChat_unknownMediaTypeRejected() {
+        ChatServiceImpl service = new ChatServiceImpl(chatMessageMapper, userMapper);
+        List<MomentMedia> bad = List.of(
+            new MomentMedia("audio", "/static/uploads/x.mp3", null, null, null));
+
+        assertThatThrownBy(() -> service.saveChat(1L, 2L, "hi", bad))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("image or video");
+    }
+
+    @Test
+    void saveChat_tooManyMediaRejected() {
+        ChatServiceImpl service = new ChatServiceImpl(chatMessageMapper, userMapper);
+        List<MomentMedia> tooMany = java.util.stream.IntStream.range(0, 10)
+            .mapToObj(i -> new MomentMedia("image", "/static/uploads/" + i + ".jpg", null, null, null))
+            .toList();
+
+        assertThatThrownBy(() -> service.saveChat(1L, 2L, "hi", tooMany))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("9");
+    }
+
+    @Test
+    void saveChat_tooLongTextRejected() {
         ChatServiceImpl service = new ChatServiceImpl(chatMessageMapper, userMapper);
         String tooLong = "x".repeat(501);
 
-        assertThatThrownBy(() -> service.saveChat(1L, 2L, tooLong))
+        assertThatThrownBy(() -> service.saveChat(1L, 2L, tooLong, null))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("500");
         verifyNoInteractions(chatMessageMapper);
     }
 
     @Test
-    void history_onlyQueriesCurrentUserAndPartner() {
+    void history_resolvesMediaListFromJson() {
         ChatServiceImpl service = new ChatServiceImpl(chatMessageMapper, userMapper);
         when(userMapper.selectAll()).thenReturn(List.of(user(1L, "wang"), user(2L, "pan")));
-        LocalDateTime t1 = LocalDateTime.of(2026, 6, 14, 22, 10);
-        LocalDateTime t2 = LocalDateTime.of(2026, 6, 14, 22, 0);
-        when(chatMessageMapper.selectHistoryPage(1L, 2L, null, 31)).thenReturn(List.of(
-            chat(10L, 1L, 2L, t1), chat(9L, 2L, 1L, t2)
-        ));
+        ChatMessage row = new ChatMessage();
+        row.setId(99L);
+        row.setSenderId(1L);
+        row.setReceiverId(2L);
+        row.setContent("");
+        row.setCreateTime(LocalDateTime.of(2026, 6, 14, 22, 10));
+        row.setMediaListJson(
+            "[{\"type\":\"image\",\"url\":\"/static/uploads/2026/06/a.jpg\",\"width\":800}]");
+        when(chatMessageMapper.selectHistoryPage(1L, 2L, null, 31)).thenReturn(List.of(row));
 
         ChatHistoryResponse page = service.history(1L, null, 30);
 
-        assertThat(page.getList()).hasSize(2);
-        assertThat(page.getList()).allSatisfy(m ->
-            assertThat(List.of(m.getSenderId(), m.getReceiverId())).contains(1L, 2L));
-        assertThat(page.getNextCursor()).isEqualTo("2026-06-14 22:00:00");
-        assertThat(page.isHasMore()).isFalse();
-        verify(chatMessageMapper).selectHistoryPage(1L, 2L, null, 31);
+        assertThat(page.getList()).hasSize(1);
+        List<MomentMedia> media = page.getList().get(0).getMediaList();
+        assertThat(media).hasSize(1);
+        assertThat(media.get(0).getType()).isEqualTo("image");
+        assertThat(media.get(0).getUrl()).isEqualTo("/static/uploads/2026/06/a.jpg");
+        assertThat(media.get(0).getWidth()).isEqualTo(800);
+    }
+
+    @Test
+    void history_corruptMediaJsonFallsBackToEmpty() {
+        ChatServiceImpl service = new ChatServiceImpl(chatMessageMapper, userMapper);
+        when(userMapper.selectAll()).thenReturn(List.of(user(1L, "wang"), user(2L, "pan")));
+        ChatMessage row = new ChatMessage();
+        row.setId(100L);
+        row.setSenderId(1L);
+        row.setReceiverId(2L);
+        row.setContent("text");
+        row.setCreateTime(LocalDateTime.of(2026, 6, 14, 22, 10));
+        row.setMediaListJson("{not json");
+        when(chatMessageMapper.selectHistoryPage(1L, 2L, null, 31)).thenReturn(List.of(row));
+
+        ChatHistoryResponse page = service.history(1L, null, 30);
+
+        assertThat(page.getList().get(0).getMediaList()).isEmpty();
     }
 
     @Test

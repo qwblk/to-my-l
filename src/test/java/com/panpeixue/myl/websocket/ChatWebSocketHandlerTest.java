@@ -1,11 +1,13 @@
 package com.panpeixue.myl.websocket;
 
 import com.panpeixue.myl.mapper.UserMapper;
+import com.panpeixue.myl.model.dto.MomentMedia;
 import com.panpeixue.myl.model.pojo.ChatMessage;
 import com.panpeixue.myl.model.pojo.User;
 import com.panpeixue.myl.service.ChatService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.socket.TextMessage;
@@ -43,14 +45,53 @@ class ChatWebSocketHandlerTest {
         when(userMapper.selectByUsername("wangshuiqun")).thenReturn(sender);
         when(userMapper.selectAll()).thenReturn(List.of(sender, receiver));
         ChatMessage saved = chat(123L, 1L, 2L, "你好");
-        when(chatService.saveChat(1L, 2L, "你好")).thenReturn(saved);
+        when(chatService.saveChat(1L, 2L, "你好", null)).thenReturn(saved);
 
         handler.handleTextMessage(session, new TextMessage("{\"type\":\"chat\",\"content\":\"你好\"}"));
 
-        verify(chatService).saveChat(1L, 2L, "你好");
+        verify(chatService).saveChat(1L, 2L, "你好", null);
         verify(sessionManager).sendToUser(eq("wangshuiqun"), contains("\"type\":\"chat\""));
         verify(sessionManager).sendToUser(eq("panpeixue"), contains("\"type\":\"chat\""));
         verify(sessionManager).sendToUser(eq("panpeixue"), contains("\"id\":123"));
+        // 不带媒体时 mediaList 是空数组
+        verify(sessionManager).sendToUser(eq("panpeixue"), contains("\"mediaList\":[]"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void jsonChat_withMedia_passesMediaToServiceAndBroadcastsMediaList() throws Exception {
+        ChatWebSocketHandler handler = new ChatWebSocketHandler(sessionManager, chatService, userMapper);
+        User sender = user(1L, "wangshuiqun", "王水群");
+        User receiver = user(2L, "panpeixue", "潘佩雪");
+        when(session.getUri()).thenReturn(URI.create("ws://localhost:8081/ws/chat?username=wangshuiqun"));
+        when(userMapper.selectByUsername("wangshuiqun")).thenReturn(sender);
+        when(userMapper.selectAll()).thenReturn(List.of(sender, receiver));
+        ChatMessage saved = chat(124L, 1L, 2L, "");
+        saved.setMediaList(List.of(
+            new MomentMedia("image", "/static/uploads/2026/06/a.jpg", 1024, 768, null),
+            new MomentMedia("video", "/static/uploads/2026/06/b.mp4", null, null, 12.5)));
+        when(chatService.saveChat(eq(1L), eq(2L), eq(""), any(List.class))).thenReturn(saved);
+
+        String payload = "{\"type\":\"chat\",\"content\":\"\",\"mediaList\":["
+            + "{\"type\":\"image\",\"url\":\"/static/uploads/2026/06/a.jpg\",\"width\":1024,\"height\":768},"
+            + "{\"type\":\"video\",\"url\":\"/static/uploads/2026/06/b.mp4\",\"duration\":12.5}"
+            + "]}";
+        handler.handleTextMessage(session, new TextMessage(payload));
+
+        ArgumentCaptor<List<MomentMedia>> captor = ArgumentCaptor.forClass(List.class);
+        verify(chatService).saveChat(eq(1L), eq(2L), eq(""), captor.capture());
+        List<MomentMedia> sent = captor.getValue();
+        assertThat(sent).hasSize(2);
+        assertThat(sent.get(0).getType()).isEqualTo("image");
+        assertThat(sent.get(0).getUrl()).isEqualTo("/static/uploads/2026/06/a.jpg");
+        assertThat(sent.get(0).getWidth()).isEqualTo(1024);
+        assertThat(sent.get(1).getType()).isEqualTo("video");
+        assertThat(sent.get(1).getDuration()).isEqualTo(12.5);
+
+        // 广播给双方都带上 data.mediaList
+        verify(sessionManager).sendToUser(eq("panpeixue"), contains("\"mediaList\":["));
+        verify(sessionManager).sendToUser(eq("panpeixue"), contains("/static/uploads/2026/06/a.jpg"));
+        verify(sessionManager).sendToUser(eq("panpeixue"), contains("/static/uploads/2026/06/b.mp4"));
     }
 
     @Test
@@ -94,12 +135,12 @@ class ChatWebSocketHandlerTest {
         when(session.getUri()).thenReturn(URI.create("ws://localhost:8081/ws/chat?username=wangshuiqun"));
         when(userMapper.selectByUsername("wangshuiqun")).thenReturn(sender);
         when(userMapper.selectAll()).thenReturn(List.of(sender, receiver));
-        when(chatService.saveChat(eq(1L), eq(2L), eq("老文本")))
-            .thenReturn(chat(124L, 1L, 2L, "老文本"));
+        when(chatService.saveChat(1L, 2L, "老文本", null))
+            .thenReturn(chat(125L, 1L, 2L, "老文本"));
 
         handler.handleTextMessage(session, new TextMessage("老文本"));
 
-        verify(chatService).saveChat(1L, 2L, "老文本");
+        verify(chatService).saveChat(1L, 2L, "老文本", null);
         verify(sessionManager).sendToUser(eq("panpeixue"), contains("\"type\":\"chat\""));
     }
 
@@ -111,11 +152,12 @@ class ChatWebSocketHandlerTest {
         when(session.getUri()).thenReturn(URI.create("ws://localhost:8081/ws/chat?username=wangshuiqun"));
         when(userMapper.selectByUsername("wangshuiqun")).thenReturn(sender);
         when(userMapper.selectAll()).thenReturn(List.of(sender, receiver));
-        when(chatService.saveChat(1L, 2L, "   ")).thenThrow(new IllegalArgumentException("Chat content cannot be empty"));
+        when(chatService.saveChat(1L, 2L, "   ", null))
+            .thenThrow(new IllegalArgumentException("Chat content and mediaList cannot both be empty"));
 
         handler.handleTextMessage(session, new TextMessage("{\"type\":\"chat\",\"content\":\"   \"}"));
 
-        verify(chatService).saveChat(1L, 2L, "   ");
+        verify(chatService).saveChat(1L, 2L, "   ", null);
         verify(sessionManager).sendTo(eq(session), contains("\"type\":\"error\""));
     }
 

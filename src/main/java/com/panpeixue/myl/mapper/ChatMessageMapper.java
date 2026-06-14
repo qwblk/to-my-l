@@ -9,8 +9,8 @@ import java.util.List;
 @Mapper
 public interface ChatMessageMapper {
 
-    @Insert("INSERT INTO chat_message (sender_id, receiver_id, content, create_time) " +
-            "VALUES (#{senderId}, #{receiverId}, #{content}, #{createTime})")
+    @Insert("INSERT INTO chat_message (sender_id, receiver_id, content, media_list, create_time) " +
+            "VALUES (#{senderId}, #{receiverId}, #{content}, #{mediaListJson}, #{createTime})")
     @Options(useGeneratedKeys = true, keyProperty = "id")
     int insert(ChatMessage msg);
 
@@ -23,6 +23,7 @@ public interface ChatMessageMapper {
         @Result(column = "sender_id", property = "senderId"),
         @Result(column = "receiver_id", property = "receiverId"),
         @Result(column = "sender_name", property = "senderName"),
+        @Result(column = "media_list", property = "mediaListJson"),
         @Result(column = "create_time", property = "createTime"),
         @Result(column = "deleted_at", property = "deletedAt")
     })
@@ -44,6 +45,7 @@ public interface ChatMessageMapper {
         @Result(column = "sender_id", property = "senderId"),
         @Result(column = "receiver_id", property = "receiverId"),
         @Result(column = "sender_name", property = "senderName"),
+        @Result(column = "media_list", property = "mediaListJson"),
         @Result(column = "create_time", property = "createTime"),
         @Result(column = "deleted_at", property = "deletedAt")
     })
