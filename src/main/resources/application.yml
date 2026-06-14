@@ -1,38 +1,29 @@
 server:
-  port: 8081
+  port: ${SERVER_PORT:8081}
 
 spring:
+  config:
+    import: optional:file:.env[.properties]
 
-  # ---------- 文件上传 ----------
-  servlet:
-    multipart:
-      max-file-size: 50MB
-      max-request-size: 50MB
-
-# ===========================
-# 自定义
-# ===========================
-app:
-  upload-path: ./uploads
   datasource:
-    url: jdbc:mysql://192.168.126.130:3306/to_my_l?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
-    username: root
-    password: 123456
+    url: "${SPRING_DATASOURCE_URL:jdbc:mysql://${MYSQL_HOST:192.168.126.130}:${MYSQL_PORT:3306}/${MYSQL_DATABASE:to_my_l}?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai&connectionTimeZone=Asia/Shanghai&forceConnectionTimeZoneToSession=true&allowPublicKeyRetrieval=true}"
+    username: ${MYSQL_USER:root}
+    password: ${MYSQL_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
     type: com.zaxxer.hikari.HikariDataSource
     hikari:
-      minimum-idle: 5
-      maximum-pool-size: 20
+      minimum-idle: ${DB_POOL_MIN_IDLE:5}
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:20}
       idle-timeout: 300000
       max-lifetime: 1200000
       connection-timeout: 30000
 
   data:
     redis:
-      host: 192.168.126.130
-      port: 6379
-      password: 123456
-      database: 0
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DATABASE:0}
       timeout: 3000ms
       lettuce:
         pool:
@@ -45,22 +36,30 @@ app:
     date-format: yyyy-MM-dd HH:mm:ss
     time-zone: Asia/Shanghai
 
+  servlet:
+    multipart:
+      max-file-size: ${UPLOAD_MAX_FILE_SIZE:50MB}
+      max-request-size: ${UPLOAD_MAX_REQUEST_SIZE:50MB}
+
 mybatis:
   mapper-locations: classpath:mapper/*.xml
   type-aliases-package: com.panpeixue.myl.model.pojo
   configuration:
     map-underscore-to-camel-case: true
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    log-impl: ${MYBATIS_LOG_IMPL:org.apache.ibatis.logging.stdout.StdOutImpl}
 
 sa-token:
-  token-name: Authorization
-  timeout: 604800
-  active-timeout: 1800
-  is-concurrent: true
+  token-name: ${SA_TOKEN_NAME:Authorization}
+  timeout: ${SA_TOKEN_TIMEOUT:604800}
+  active-timeout: ${SA_TOKEN_ACTIVE_TIMEOUT:1800}
+  is-concurrent: false
   is-share: false
   token-style: random-64
-  is-log: false
+  is-log: ${SA_TOKEN_IS_LOG:false}
+
+app:
+  upload-path: ${APP_UPLOAD_PATH:./uploads}
 
 logging:
   level:
-    com.panpeixue.myl: debug
+    com.panpeixue.myl: ${APP_LOG_LEVEL:debug}

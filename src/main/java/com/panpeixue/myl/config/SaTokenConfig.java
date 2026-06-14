@@ -21,10 +21,21 @@ public class SaTokenConfig {
                         "/ws/**",
                         "/chat.html",
                         "/uploads/**",
-                        "/upload",
+                        "/static/**",
                         "/", "/index.html"
                 )
-                .setAuth(obj -> SaRouter.match("/**", StpUtil::checkLogin))
-                .setError(e -> SaResult.error(e.getMessage()));
+                .setAuth(obj -> {
+                    /* skip auth for OPTIONS preflight */
+                    if (!"OPTIONS".equals(SaHolder.getRequest().getMethod())) {
+                        SaRouter.match("/**", StpUtil::checkLogin);
+                    }
+                })
+                .setError(e -> {
+                    SaHolder.getResponse()
+                        .setHeader("Access-Control-Allow-Origin", "*")
+                        .setHeader("Access-Control-Allow-Methods", "*")
+                        .setHeader("Access-Control-Allow-Headers", "*");
+                    return SaResult.error(e.getMessage());
+                });
     }
 }

@@ -6,6 +6,7 @@ import com.panpeixue.myl.mapper.UserMapper;
 import com.panpeixue.myl.model.dto.UserLoginRequest;
 import com.panpeixue.myl.model.pojo.User;
 import com.panpeixue.myl.service.UserService;
+import com.panpeixue.myl.websocket.WebSocketSessionManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cache.annotation.CacheEvict;
@@ -14,6 +15,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -24,9 +26,11 @@ public class UserServiceImpl implements UserService {
     private static final Logger log = LoggerFactory.getLogger(UserServiceImpl.class);
     private static final BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
     private final UserMapper userMapper;
+    private final WebSocketSessionManager sessionManager;
 
-    public UserServiceImpl(UserMapper userMapper) {
+    public UserServiceImpl(UserMapper userMapper, WebSocketSessionManager sessionManager) {
         this.userMapper = userMapper;
+        this.sessionManager = sessionManager;
     }
 
     @Override
@@ -57,6 +61,14 @@ public class UserServiceImpl implements UserService {
 
         Map<String, Object> result = new HashMap<>();
         result.put("token", tokenInfo.getTokenValue());
+
+        /* partner online check */
+        boolean partnerOnline = userMapper.selectAll().stream()
+                .filter(u -> !u.getUsername().equals(user.getUsername()))
+                .findFirst()
+                .map(partner -> sessionManager.isOnline(partner.getUsername()))
+                .orElse(false);
+        result.put("partnerOnline", partnerOnline);
 
         /* first login greeting */
         if (user.getIsFirstLogin() != null && user.getIsFirstLogin() == 1) {
@@ -97,5 +109,21 @@ public class UserServiceImpl implements UserService {
         userMapper.updateInfo(update);
         log.info("User {} updated info", userId);
         return userMapper.selectById(userId);
+    }
+
+    /**
+     * 更新当前用户最后活跃时间 = NOW()。
+     * 调用方已经过 sa-token 鉴权，userId 即为当前登录用户，自然只会动自己这一行。
+     * 顺手清掉 userCache，让下次 /user/me 拿到新的 lastSeenAt。
+     */
+    @Override
+    @CacheEvict(value = "userCache", key = "#userId")
+    public void heartbeat(Long userId) {
+        userMapper.updateLastSeenAt(userId);
+    }
+
+    @Override
+    public LocalDateTime getLastSeenAt(Long userId) {
+        return userMapper.selectLastSeenAt(userId);
     }
 }

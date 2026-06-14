@@ -1,0 +1,89 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: to-my-l-mysql
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-to_my_l}
+    command:
+      - --default-time-zone=+08:00
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_general_ci
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      # 仅第一次初始化数据卷时执行；已有 mysql_data 时不会重复执行
+      - ./src/main/resources/sql/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$${MYSQL_ROOT_PASSWORD} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - to-my-l
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: to-my-l-redis
+    restart: unless-stopped
+    command: ["sh", "-c", "redis-server --appendonly yes --requirepass \"$${REDIS_PASSWORD}\""]
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - to-my-l
+
+  app:
+    build: .
+    image: to-my-l-backend:latest
+    container_name: to-my-l-app
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      SERVER_PORT: ${SERVER_PORT:-8081}
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-to_my_l}
+      MYSQL_USER: ${MYSQL_USER:-root}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_DATABASE: ${REDIS_DATABASE:-0}
+      APP_UPLOAD_PATH: ${APP_UPLOAD_PATH:-/app/uploads}
+      APP_LOG_LEVEL: ${APP_LOG_LEVEL:-info}
+      MYBATIS_LOG_IMPL: ${MYBATIS_LOG_IMPL:-org.apache.ibatis.logging.nologging.NoLoggingImpl}
+      JAVA_OPTS: ${JAVA_OPTS:-}
+    ports:
+      - "${SERVER_PORT:-8081}:8081"
+    volumes:
+      - ./uploads:/app/uploads
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - to-my-l
+
+networks:
+  to-my-l:
+    driver: bridge
+
+volumes:
+  mysql_data:
+  redis_data:

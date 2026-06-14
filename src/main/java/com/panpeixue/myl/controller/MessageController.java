@@ -2,11 +2,14 @@ package com.panpeixue.myl.controller;
 
 import cn.dev33.satoken.stp.StpUtil;
 import com.panpeixue.myl.common.Result;
+import com.panpeixue.myl.model.dto.MessagePageResponse;
 import com.panpeixue.myl.model.dto.MessageSendRequest;
 import com.panpeixue.myl.model.pojo.Message;
 import com.panpeixue.myl.service.MessageService;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @RestController
@@ -35,6 +38,24 @@ public class MessageController {
     public Result<List<Message>> sent() {
         long userId = StpUtil.getLoginIdAsLong();
         return Result.ok(messageService.getSent(userId));
+    }
+
+    @GetMapping("/received/page")
+    public Result<MessagePageResponse> receivedPage(
+            @RequestParam(required = false)
+            @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime cursor,
+            @RequestParam(required = false) Integer size) {
+        long userId = StpUtil.getLoginIdAsLong();
+        return Result.ok(messageService.getReceivedPage(userId, cursor, size));
+    }
+
+    @GetMapping("/sent/page")
+    public Result<MessagePageResponse> sentPage(
+            @RequestParam(required = false)
+            @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime cursor,
+            @RequestParam(required = false) Integer size) {
+        long userId = StpUtil.getLoginIdAsLong();
+        return Result.ok(messageService.getSentPage(userId, cursor, size));
     }
 
     @PutMapping("/read/{messageId}")

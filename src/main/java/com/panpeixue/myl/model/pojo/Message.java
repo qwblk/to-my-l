@@ -1,5 +1,7 @@
 package com.panpeixue.myl.model.pojo;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
+
 import java.io.Serializable;
 import java.time.LocalDateTime;
 
@@ -10,6 +12,7 @@ public class Message implements Serializable {
     private String content;
     private Integer isRead;
     private String senderName;
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "Asia/Shanghai")
     private LocalDateTime createTime;
 
     public Long getId() { return id; }

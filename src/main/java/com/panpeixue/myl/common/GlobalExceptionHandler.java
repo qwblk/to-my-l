@@ -63,6 +63,12 @@ public class GlobalExceptionHandler {
 
     // ==================== Business ====================
 
+    @ExceptionHandler(BizException.class)
+    public Result<?> handleBiz(BizException e) {
+        log.warn("Biz error {}: {}", e.getCode(), e.getMessage());
+        return Result.error(e.getCode(), e.getMessage());
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public Result<?> handleIllegalArgument(IllegalArgumentException e) {
         log.warn("Bad argument: {}", e.getMessage());

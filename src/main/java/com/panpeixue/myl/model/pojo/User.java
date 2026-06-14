@@ -1,5 +1,7 @@
 package com.panpeixue.myl.model.pojo;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
+
 import java.io.Serializable;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -15,7 +17,11 @@ public class User implements Serializable {
     private LocalDate birthday;
     private String bio;
     private Integer isFirstLogin;
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "Asia/Shanghai")
+    private LocalDateTime lastSeenAt;
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "Asia/Shanghai")
     private LocalDateTime createTime;
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "Asia/Shanghai")
     private LocalDateTime updateTime;
 
     public Integer getAge() {
@@ -40,6 +46,8 @@ public class User implements Serializable {
     public void setBio(String bio) { this.bio = bio; }
     public Integer getIsFirstLogin() { return isFirstLogin; }
     public void setIsFirstLogin(Integer isFirstLogin) { this.isFirstLogin = isFirstLogin; }
+    public LocalDateTime getLastSeenAt() { return lastSeenAt; }
+    public void setLastSeenAt(LocalDateTime lastSeenAt) { this.lastSeenAt = lastSeenAt; }
     public LocalDateTime getCreateTime() { return createTime; }
     public void setCreateTime(LocalDateTime createTime) { this.createTime = createTime; }
     public LocalDateTime getUpdateTime() { return updateTime; }

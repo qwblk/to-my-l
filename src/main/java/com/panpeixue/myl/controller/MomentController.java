@@ -25,7 +25,14 @@ public class MomentController {
     @PostMapping
     public Result<Moment> create(@RequestBody MomentCreateRequest req) {
         long userId = StpUtil.getLoginIdAsLong();
-        return Result.ok(momentService.create(userId, req.getContent(), req.getImage()));
+        return Result.ok(momentService.create(userId, req.getContent(), req.getMediaList()));
+    }
+
+    @DeleteMapping("/{momentId}")
+    public Result<Void> delete(@PathVariable Long momentId) {
+        long userId = StpUtil.getLoginIdAsLong();
+        momentService.delete(momentId, userId);
+        return Result.ok();
     }
 
     @GetMapping("/all")

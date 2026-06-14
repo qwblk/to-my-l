@@ -2,6 +2,7 @@ package com.panpeixue.myl.service.impl;
 
 import com.panpeixue.myl.mapper.MessageMapper;
 import com.panpeixue.myl.mapper.UserMapper;
+import com.panpeixue.myl.model.dto.MessagePageResponse;
 import com.panpeixue.myl.model.pojo.Message;
 import com.panpeixue.myl.service.MessageService;
 import com.panpeixue.myl.websocket.ChatWebSocketHandler;
@@ -11,10 +12,16 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 @Service
 public class MessageServiceImpl implements MessageService {
+
+    private static final int DEFAULT_PAGE_SIZE = 20;
+    private static final int MAX_PAGE_SIZE = 50;
+    private static final DateTimeFormatter CURSOR_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private final MessageMapper messageMapper;
     private final UserMapper userMapper;
@@ -60,6 +67,20 @@ public class MessageServiceImpl implements MessageService {
     }
 
     @Override
+    public MessagePageResponse getReceivedPage(Long userId, LocalDateTime cursor, Integer size) {
+        int pageSize = clampSize(size);
+        List<Message> rows = messageMapper.selectReceivedPage(userId, cursor, pageSize + 1);
+        return toPage(rows, pageSize);
+    }
+
+    @Override
+    public MessagePageResponse getSentPage(Long userId, LocalDateTime cursor, Integer size) {
+        int pageSize = clampSize(size);
+        List<Message> rows = messageMapper.selectSentPage(userId, cursor, pageSize + 1);
+        return toPage(rows, pageSize);
+    }
+
+    @Override
     @Transactional
     @CacheEvict(value = "messageList", allEntries = true)
     public void markRead(Long messageId, Long userId) {
@@ -75,5 +96,19 @@ public class MessageServiceImpl implements MessageService {
     @Override
     public int countUnread(Long userId) {
         return messageMapper.countUnread(userId);
+    }
+
+    private MessagePageResponse toPage(List<Message> rows, int pageSize) {
+        boolean hasMore = rows.size() > pageSize;
+        List<Message> list = hasMore ? rows.subList(0, pageSize) : rows;
+        String nextCursor = list.isEmpty() || list.get(list.size() - 1).getCreateTime() == null
+            ? null
+            : list.get(list.size() - 1).getCreateTime().format(CURSOR_FMT);
+        return new MessagePageResponse(list, nextCursor, hasMore);
+    }
+
+    private int clampSize(Integer size) {
+        if (size == null || size < 1) return DEFAULT_PAGE_SIZE;
+        return Math.min(size, MAX_PAGE_SIZE);
     }
 }

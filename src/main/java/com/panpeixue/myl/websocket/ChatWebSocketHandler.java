@@ -1,7 +1,13 @@
 package com.panpeixue.myl.websocket;
 
-import com.panpeixue.myl.mapper.ChatMessageMapper;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.panpeixue.myl.mapper.UserMapper;
+import com.panpeixue.myl.model.dto.ChatHistoryResponse;
 import com.panpeixue.myl.model.pojo.ChatMessage;
+import com.panpeixue.myl.model.pojo.User;
+import com.panpeixue.myl.service.ChatService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -10,9 +16,12 @@ import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 @Component
@@ -20,15 +29,21 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
     private static final Logger log = LoggerFactory.getLogger(ChatWebSocketHandler.class);
     private static final DateTimeFormatter fmt = DateTimeFormatter.ofPattern("HH:mm:ss");
-    private static final DateTimeFormatter historyFmt = DateTimeFormatter.ofPattern("MM-dd HH:mm");
+    private static final DateTimeFormatter dateTimeFmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private static final String HEART_TOKEN = "__TML_HEART__";
+    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
 
     private final WebSocketSessionManager sessionManager;
-    private final ChatMessageMapper chatMessageMapper;
+    private final ChatService chatService;
+    private final UserMapper userMapper;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public ChatWebSocketHandler(WebSocketSessionManager sessionManager,
-                                ChatMessageMapper chatMessageMapper) {
+                                ChatService chatService,
+                                UserMapper userMapper) {
         this.sessionManager = sessionManager;
-        this.chatMessageMapper = chatMessageMapper;
+        this.chatService = chatService;
+        this.userMapper = userMapper;
     }
 
     @Override
@@ -37,23 +52,13 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         sessionManager.add(username, session);
         log.info("{} connected, online: {}", username, sessionManager.count());
 
-        /* push chat history to the new user */
-        List<ChatMessage> history = chatMessageMapper.selectRecent();
-        StringBuilder sb = new StringBuilder("[");
-        for (int i = 0; i < history.size(); i++) {
-            if (i > 0) sb.append(",");
-            ChatMessage m = history.get(i);
-            sb.append("{\"sender\":\"").append(esc(m.getSenderName()))
-              .append("\",\"content\":\"").append(esc(m.getContent()))
-              .append("\",\"time\":\"").append(m.getCreateTime().format(historyFmt))
-              .append("\",\"type\":\"chat\"}");
+        User user = userMapper.selectByUsername(username);
+        if (user != null) {
+            pushHistory(session, user.getId());
         }
-        sb.append("]");
-        sessionManager.sendTo(session, buildJson("SYSTEM", "Chat history", "history",
-            sb.toString()));
 
         /* tell everyone this user is now online */
-        sessionManager.broadcast(buildJson(username, "is now online", "online", null));
+        sessionManager.broadcast(buildJson(displayName(username), "is now online", "online", null));
 
         /* tell THIS user who else is already online */
         Set<String> others = sessionManager.onlineUsers();
@@ -66,16 +71,30 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) {
         String username = getUsername(session);
-        String content = message.getPayload();
+        User sender = userMapper.selectByUsername(username);
+        if (sender == null) {
+            sessionManager.sendTo(session, buildJson("SYSTEM", "Unknown user", "error", null));
+            return;
+        }
+        User receiver = getPartner(sender.getId());
+        if (receiver == null) {
+            sessionManager.sendTo(session, buildJson("SYSTEM", "Partner not found", "error", null));
+            return;
+        }
 
-        /* persist to DB */
-        ChatMessage msg = new ChatMessage();
-        msg.setSenderName(username);
-        msg.setContent(content);
-        chatMessageMapper.insert(msg);
+        Incoming incoming = parse(message.getPayload());
+        try {
+            if (incoming.isHeart()) {
+                broadcastToPair(sender, receiver, buildHeartJson(sender, receiver));
+                return;
+            }
 
-        /* broadcast to all */
-        broadcast(username, content, "chat");
+            ChatMessage saved = chatService.saveChat(sender.getId(), receiver.getId(), incoming.content());
+            String json = buildChatJson(sender, receiver, saved);
+            broadcastToPair(sender, receiver, json);
+        } catch (IllegalArgumentException e) {
+            sessionManager.sendTo(session, buildJson("SYSTEM", e.getMessage(), "error", null));
+        }
     }
 
     @Override
@@ -83,11 +102,74 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         String username = getUsername(session);
         sessionManager.remove(username, session);
         log.info("{} disconnected, online: {}", username, sessionManager.count());
-        sessionManager.broadcast(buildJson(username, "is now offline", "offline", null));
+        sessionManager.broadcast(buildJson(displayName(username), "is now offline", "offline", null));
     }
 
-    private void broadcast(String sender, String content, String type) {
-        sessionManager.broadcast(buildJson(sender, content, type, null));
+    private void pushHistory(WebSocketSession session, Long userId) {
+        ChatHistoryResponse history = chatService.history(userId, null, 30);
+        StringBuilder messages = new StringBuilder("[");
+        List<ChatMessage> list = history.getList();
+        for (int i = 0; i < list.size(); i++) {
+            if (i > 0) messages.append(',');
+            messages.append(toChatMessageJson(list.get(i)));
+        }
+        messages.append(']');
+        sessionManager.sendTo(session, buildJson("SYSTEM", "history", "history",
+            "{\"messages\":" + messages + "}"));
+    }
+
+    private void broadcastToPair(User sender, User receiver, String json) {
+        sessionManager.sendToUser(sender.getUsername(), json);
+        sessionManager.sendToUser(receiver.getUsername(), json);
+    }
+
+    private String buildChatJson(User sender, User receiver, ChatMessage saved) {
+        String data = "{\"id\":" + saved.getId()
+            + ",\"senderId\":" + sender.getId()
+            + ",\"receiverId\":" + receiver.getId()
+            + ",\"createTime\":\"" + saved.getCreateTime().format(dateTimeFmt) + "\"}";
+        return buildJson(sender.getName(), saved.getContent(), "chat", data);
+    }
+
+    private String buildHeartJson(User sender, User receiver) {
+        String data = "{\"senderId\":" + sender.getId()
+            + ",\"receiverId\":" + receiver.getId() + "}";
+        return buildJson(sender.getName(), "heart", "heart", data);
+    }
+
+    private String toChatMessageJson(ChatMessage m) {
+        return "{\"id\":" + m.getId()
+            + ",\"senderId\":" + m.getSenderId()
+            + ",\"receiverId\":" + m.getReceiverId()
+            + ",\"senderName\":\"" + esc(m.getSenderName()) + "\""
+            + ",\"content\":\"" + esc(m.getContent()) + "\""
+            + ",\"createTime\":\"" + m.getCreateTime().format(dateTimeFmt) + "\"}";
+    }
+
+    private Incoming parse(String payload) {
+        if (payload == null) return Incoming.chat("");
+        String trimmed = payload.trim();
+        if (HEART_TOKEN.equals(trimmed)) return Incoming.heartEvent();
+        if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+            try {
+                Map<String, Object> obj = objectMapper.readValue(trimmed, MAP_TYPE);
+                Object type = obj.get("type");
+                if ("heart".equals(type)) return Incoming.heartEvent();
+                if ("chat".equals(type)) return Incoming.chat(String.valueOf(obj.getOrDefault("content", "")));
+                throw new IllegalArgumentException("Unsupported chat command type: " + type);
+            } catch (JsonProcessingException e) {
+                // JSON 解析失败时按旧前端纯文本处理，最大兼容
+                return Incoming.chat(payload);
+            }
+        }
+        return Incoming.chat(payload);
+    }
+
+    private User getPartner(Long userId) {
+        return userMapper.selectAll().stream()
+            .filter(u -> !u.getId().equals(userId))
+            .findFirst()
+            .orElse(null);
     }
 
     public static String buildJson(String sender, String content, String type, String extra) {
@@ -108,13 +190,27 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     }
 
     private String getUsername(WebSocketSession session) {
-        Object uri = session.getUri();
-        if (uri != null) {
-            String q = uri.toString();
-            if (q.contains("username=")) {
-                return q.substring(q.indexOf("username=") + 9);
+        if (session.getUri() != null) {
+            String q = session.getUri().getQuery();
+            if (q != null) {
+                for (String part : q.split("&")) {
+                    int eq = part.indexOf('=');
+                    if (eq > 0 && "username".equals(part.substring(0, eq))) {
+                        return URLDecoder.decode(part.substring(eq + 1), StandardCharsets.UTF_8);
+                    }
+                }
             }
         }
         return "Anonymous";
+    }
+
+    private String displayName(String username) {
+        User user = userMapper.selectByUsername(username);
+        return user == null ? username : user.getName();
+    }
+
+    private record Incoming(boolean isHeart, String content) {
+        static Incoming heartEvent() { return new Incoming(true, null); }
+        static Incoming chat(String content) { return new Incoming(false, content); }
     }
 }
