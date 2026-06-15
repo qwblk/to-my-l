@@ -128,7 +128,7 @@ data 为 null。
 - `GET /static/uploads/2026/06/<uuid>.jpg` —— 当前规范，前端用这个拼 URL
 - `GET /uploads/<...>` —— 历史 URL，老 `moment.image` 数据兜底
 
-两条都映射到磁盘目录 `app.upload-path`（默认 `D:/project/java/to-my-l/uploads`）。
+两条都映射到磁盘目录 `app.upload-path`（容器里默认 `/app/uploads`，本地默认 `./uploads`）。
 
 ---
 

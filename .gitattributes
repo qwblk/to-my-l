@@ -1,2 +1,25 @@
+# Git 自动处理换行：仓库里所有文本默认 LF；checkout 到 Windows 时由 Git 决定
+* text=auto eol=lf
+
+# 这些必须 LF（Linux/容器里跑 shell、yaml/sql 解析）
 /mvnw text eol=lf
+Dockerfile text eol=lf
+*.sh text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.sql text eol=lf
+
+# 这些是 Windows 脚本，必须 CRLF
 *.cmd text eol=crlf
+*.bat text eol=crlf
+
+# 二进制不动
+*.jar binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.mp4 binary
+*.mov binary
+*.zip binary
