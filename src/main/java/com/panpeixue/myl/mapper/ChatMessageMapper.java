@@ -36,7 +36,10 @@ public interface ChatMessageMapper {
         "WHERE cm.deleted_at IS NULL",
         "AND ((cm.sender_id = #{me} AND cm.receiver_id = #{partner})",
         "  OR (cm.sender_id = #{partner} AND cm.receiver_id = #{me}))",
-        "<if test='cursor != null'>AND cm.create_time &lt; #{cursor}</if>",
+        "<if test='cursor != null and cursorId != null'>",
+        "  AND (cm.create_time &lt; #{cursor} OR (cm.create_time = #{cursor} AND cm.id &lt; #{cursorId}))",
+        "</if>",
+        "<if test='cursor != null and cursorId == null'>AND cm.create_time &lt; #{cursor}</if>",
         "ORDER BY cm.create_time DESC, cm.id DESC",
         "LIMIT #{limit}",
         "</script>"
@@ -52,5 +55,6 @@ public interface ChatMessageMapper {
     List<ChatMessage> selectHistoryPage(@Param("me") Long me,
                                         @Param("partner") Long partner,
                                         @Param("cursor") LocalDateTime cursor,
+                                        @Param("cursorId") Long cursorId,
                                         @Param("limit") int limit);
 }

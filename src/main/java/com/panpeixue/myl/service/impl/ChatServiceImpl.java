@@ -62,9 +62,14 @@ public class ChatServiceImpl implements ChatService {
 
     @Override
     public ChatHistoryResponse history(Long userId, LocalDateTime cursor, Integer size) {
+        return history(userId, cursor, null, size);
+    }
+
+    @Override
+    public ChatHistoryResponse history(Long userId, LocalDateTime cursor, Long cursorId, Integer size) {
         int pageSize = clampSize(size);
         Long partnerId = findPartnerId(userId);
-        List<ChatMessage> rows = chatMessageMapper.selectHistoryPage(userId, partnerId, cursor, pageSize + 1);
+        List<ChatMessage> rows = chatMessageMapper.selectHistoryPage(userId, partnerId, cursor, cursorId, pageSize + 1);
         boolean hasMore = rows.size() > pageSize;
         List<ChatMessage> list = hasMore ? rows.subList(0, pageSize) : rows;
         for (ChatMessage msg : list) {

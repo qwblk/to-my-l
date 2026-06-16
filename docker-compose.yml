@@ -11,6 +11,8 @@ services:
       - --default-time-zone=+08:00
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_general_ci
+      # 普通客户端连接时默认执行；root/SUPER 用户可能不触发，所以应用侧还配了 Hikari connection-init-sql。
+      - --init-connect=SET NAMES utf8mb4 COLLATE utf8mb4_general_ci
     ports:
       - "${MYSQL_PORT:-3306}:3306"
     volumes:
@@ -69,10 +71,11 @@ services:
       APP_LOG_LEVEL: ${APP_LOG_LEVEL:-info}
       MYBATIS_LOG_IMPL: ${MYBATIS_LOG_IMPL:-org.apache.ibatis.logging.nologging.NoLoggingImpl}
       JAVA_OPTS: ${JAVA_OPTS:-}
-      FLYWAY_ENABLED: ${FLYWAY_ENABLED:-false}
-      # 已有库首次接入 Flyway 时设成"当前 schema 的版本号"。
-      # 全新空库部署可以把它设成 0，让 Flyway 从 V1 开始顺序执行。
-      FLYWAY_BASELINE_VERSION: ${FLYWAY_BASELINE_VERSION:-1}
+      FLYWAY_ENABLED: ${FLYWAY_ENABLED:-true}
+      # 默认 0：全新空库部署时 Flyway 从 V1 开始顺序执行，不跳过任何迁移。
+      # 已有库首次接入 Flyway 时，在 .env 里把 FLYWAY_BASELINE_VERSION 显式设成"当前 schema 的版本号"
+      # （例如已经手工建到 V3 状态的库就设成 3）。
+      FLYWAY_BASELINE_VERSION: ${FLYWAY_BASELINE_VERSION:-0}
       FLYWAY_BASELINE_ON_MIGRATE: ${FLYWAY_BASELINE_ON_MIGRATE:-true}
     ports:
       - "${SERVER_PORT:-8081}:8081"
@@ -87,7 +90,11 @@ services:
       - to-my-l
 
 networks:
+  # 显式锁定网络名为 to-my-l，不让 compose 加 <project>_ 前缀。
+  # 前端 compose 用 external: true + name: to-my-l 接入这个已存在的网络。
+  # 启动顺序约定：后端先 docker compose up（创建网络），前端再起。
   to-my-l:
+    name: to-my-l
     driver: bridge
 
 volumes:

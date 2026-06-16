@@ -44,18 +44,20 @@ public class MessageController {
     public Result<MessagePageResponse> receivedPage(
             @RequestParam(required = false)
             @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime cursor,
+            @RequestParam(required = false) Long cursorId,
             @RequestParam(required = false) Integer size) {
         long userId = StpUtil.getLoginIdAsLong();
-        return Result.ok(messageService.getReceivedPage(userId, cursor, size));
+        return Result.ok(messageService.getReceivedPage(userId, cursor, cursorId, size));
     }
 
     @GetMapping("/sent/page")
     public Result<MessagePageResponse> sentPage(
             @RequestParam(required = false)
             @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime cursor,
+            @RequestParam(required = false) Long cursorId,
             @RequestParam(required = false) Integer size) {
         long userId = StpUtil.getLoginIdAsLong();
-        return Result.ok(messageService.getSentPage(userId, cursor, size));
+        return Result.ok(messageService.getSentPage(userId, cursor, cursorId, size));
     }
 
     @PutMapping("/read/{messageId}")

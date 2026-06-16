@@ -138,7 +138,7 @@ class ChatServiceTest {
         row.setCreateTime(LocalDateTime.of(2026, 6, 14, 22, 10));
         row.setMediaListJson(
             "[{\"type\":\"image\",\"url\":\"/static/uploads/2026/06/a.jpg\",\"width\":800}]");
-        when(chatMessageMapper.selectHistoryPage(1L, 2L, null, 31)).thenReturn(List.of(row));
+        when(chatMessageMapper.selectHistoryPage(1L, 2L, null, null, 31)).thenReturn(List.of(row));
 
         ChatHistoryResponse page = service.history(1L, null, 30);
 
@@ -161,7 +161,7 @@ class ChatServiceTest {
         row.setContent("text");
         row.setCreateTime(LocalDateTime.of(2026, 6, 14, 22, 10));
         row.setMediaListJson("{not json");
-        when(chatMessageMapper.selectHistoryPage(1L, 2L, null, 31)).thenReturn(List.of(row));
+        when(chatMessageMapper.selectHistoryPage(1L, 2L, null, null, 31)).thenReturn(List.of(row));
 
         ChatHistoryResponse page = service.history(1L, null, 30);
 
@@ -176,14 +176,14 @@ class ChatServiceTest {
         List<ChatMessage> rows = java.util.stream.IntStream.rangeClosed(1, 51)
             .mapToObj(i -> chat((long) i, 1L, 2L, cursor.minusMinutes(i)))
             .toList();
-        when(chatMessageMapper.selectHistoryPage(1L, 2L, cursor, 51)).thenReturn(rows);
+        when(chatMessageMapper.selectHistoryPage(1L, 2L, cursor, null, 51)).thenReturn(rows);
 
         ChatHistoryResponse page = service.history(1L, cursor, 99);
 
         assertThat(page.getList()).hasSize(50);
         assertThat(page.isHasMore()).isTrue();
         ArgumentCaptor<Integer> limit = ArgumentCaptor.forClass(Integer.class);
-        verify(chatMessageMapper).selectHistoryPage(eq(1L), eq(2L), eq(cursor), limit.capture());
+        verify(chatMessageMapper).selectHistoryPage(eq(1L), eq(2L), eq(cursor), isNull(), limit.capture());
         assertThat(limit.getValue()).isEqualTo(51);
     }
 

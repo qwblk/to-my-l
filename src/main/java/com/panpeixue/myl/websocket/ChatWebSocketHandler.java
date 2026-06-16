@@ -1,5 +1,6 @@
 package com.panpeixue.myl.websocket;
 
+import cn.dev33.satoken.stp.StpUtil;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -32,6 +33,9 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     private static final DateTimeFormatter fmt = DateTimeFormatter.ofPattern("HH:mm:ss");
     private static final DateTimeFormatter dateTimeFmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final String HEART_TOKEN = "__TML_HEART__";
+    private static final CloseStatus UNAUTHORIZED = new CloseStatus(4003, "Unauthorized");
+    private static final String ATTR_USERNAME = "username";
+    private static final String ATTR_USER_ID = "userId";
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
     private static final TypeReference<List<MomentMedia>> MEDIA_LIST_TYPE = new TypeReference<>() {};
 
@@ -50,17 +54,25 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
-        String username = getUsername(session);
+        User user;
+        try {
+            user = authenticate(session);
+        } catch (Exception e) {
+            sessionManager.sendTo(session, buildJson("SYSTEM", "Please login first", "error", null));
+            try { session.close(UNAUTHORIZED); } catch (Exception ignored) {}
+            return;
+        }
+
+        String username = user.getUsername();
+        session.getAttributes().put(ATTR_USERNAME, username);
+        session.getAttributes().put(ATTR_USER_ID, user.getId());
         sessionManager.add(username, session);
         log.info("{} connected, online: {}", username, sessionManager.count());
 
-        User user = userMapper.selectByUsername(username);
-        if (user != null) {
-            pushHistory(session, user.getId());
-        }
+        pushHistory(session, user.getId());
 
         /* tell everyone this user is now online */
-        sessionManager.broadcast(buildJson(displayName(username), "is now online", "online", null));
+        sessionManager.broadcast(buildJson(user.getName(), "is now online", "online", null));
 
         /* tell THIS user who else is already online */
         Set<String> others = sessionManager.onlineUsers();
@@ -72,8 +84,12 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) {
-        String username = getUsername(session);
-        User sender = userMapper.selectByUsername(username);
+        Long userId = (Long) session.getAttributes().get(ATTR_USER_ID);
+        if (userId == null) {
+            sessionManager.sendTo(session, buildJson("SYSTEM", "Please login first", "error", null));
+            return;
+        }
+        User sender = userMapper.selectById(userId);
         if (sender == null) {
             sessionManager.sendTo(session, buildJson("SYSTEM", "Unknown user", "error", null));
             return;
@@ -84,8 +100,8 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             return;
         }
 
-        Incoming incoming = parse(message.getPayload());
         try {
+            Incoming incoming = parse(message.getPayload());
             if (incoming.isHeart()) {
                 broadcastToPair(sender, receiver, buildHeartJson(sender, receiver));
                 return;
@@ -102,10 +118,13 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
-        String username = getUsername(session);
-        sessionManager.remove(username, session);
+        String username = (String) session.getAttributes().get(ATTR_USERNAME);
+        if (username == null) return;
+        boolean removedCurrent = sessionManager.remove(username, session);
         log.info("{} disconnected, online: {}", username, sessionManager.count());
-        sessionManager.broadcast(buildJson(displayName(username), "is now offline", "offline", null));
+        if (removedCurrent) {
+            sessionManager.broadcast(buildJson(displayName(username), "is now offline", "offline", null));
+        }
     }
 
     private void pushHistory(WebSocketSession session, Long userId) {
@@ -223,19 +242,50 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         return s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "");
     }
 
-    private String getUsername(WebSocketSession session) {
+    /**
+     * WebSocket 握手鉴权：不再信任 ?username=xxx，必须带有效 token。
+     * 支持三种位置，方便浏览器 WebSocket 使用：
+     *   1) /ws/chat?token=xxx
+     *   2) /ws/chat?Authorization=xxx
+     *   3) Header: Authorization: xxx（非浏览器客户端可用）
+     */
+    private User authenticate(WebSocketSession session) {
+        String token = getToken(session);
+        Object loginId = StpUtil.getLoginIdByToken(token);
+        Long userId = Long.valueOf(String.valueOf(loginId));
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new IllegalArgumentException("Unknown user");
+        }
+        return user;
+    }
+
+    private String getToken(WebSocketSession session) {
+        String header = session.getHandshakeHeaders().getFirst("Authorization");
+        if (header != null && !header.isBlank()) {
+            return stripBearer(header.trim());
+        }
         if (session.getUri() != null) {
             String q = session.getUri().getQuery();
             if (q != null) {
                 for (String part : q.split("&")) {
                     int eq = part.indexOf('=');
-                    if (eq > 0 && "username".equals(part.substring(0, eq))) {
-                        return URLDecoder.decode(part.substring(eq + 1), StandardCharsets.UTF_8);
+                    if (eq <= 0) continue;
+                    String key = part.substring(0, eq);
+                    if ("token".equals(key) || "Authorization".equals(key)) {
+                        return stripBearer(URLDecoder.decode(part.substring(eq + 1), StandardCharsets.UTF_8));
                     }
                 }
             }
         }
-        return "Anonymous";
+        return null;
+    }
+
+    private String stripBearer(String token) {
+        if (token != null && token.regionMatches(true, 0, "Bearer ", 0, 7)) {
+            return token.substring(7).trim();
+        }
+        return token;
     }
 
     private String displayName(String username) {

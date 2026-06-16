@@ -39,6 +39,11 @@ public class DiaryServiceImpl implements DiaryService {
         if (diary.getContent() == null || diary.getContent().isBlank()) {
             throw new IllegalArgumentException("Content cannot be empty");
         }
+        if (diary.getIsPrivate() == null) {
+            diary.setIsPrivate(1);
+        } else if (diary.getIsPrivate() != 0 && diary.getIsPrivate() != 1) {
+            throw new IllegalArgumentException("isPrivate must be 0 or 1");
+        }
         diaryMapper.insert(diary);
         sessionManager.broadcast(ChatWebSocketHandler.buildJson("SYSTEM",
             "New diary posted", "diary",

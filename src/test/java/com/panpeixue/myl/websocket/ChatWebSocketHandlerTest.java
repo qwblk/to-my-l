@@ -13,9 +13,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 
-import java.net.URI;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
@@ -41,9 +42,7 @@ class ChatWebSocketHandlerTest {
         ChatWebSocketHandler handler = new ChatWebSocketHandler(sessionManager, chatService, userMapper);
         User sender = user(1L, "wangshuiqun", "王水群");
         User receiver = user(2L, "panpeixue", "潘佩雪");
-        when(session.getUri()).thenReturn(URI.create("ws://localhost:8081/ws/chat?username=wangshuiqun"));
-        when(userMapper.selectByUsername("wangshuiqun")).thenReturn(sender);
-        when(userMapper.selectAll()).thenReturn(List.of(sender, receiver));
+        mockAuthenticated(sender, receiver);
         ChatMessage saved = chat(123L, 1L, 2L, "你好");
         when(chatService.saveChat(1L, 2L, "你好", null)).thenReturn(saved);
 
@@ -53,7 +52,6 @@ class ChatWebSocketHandlerTest {
         verify(sessionManager).sendToUser(eq("wangshuiqun"), contains("\"type\":\"chat\""));
         verify(sessionManager).sendToUser(eq("panpeixue"), contains("\"type\":\"chat\""));
         verify(sessionManager).sendToUser(eq("panpeixue"), contains("\"id\":123"));
-        // 不带媒体时 mediaList 是空数组
         verify(sessionManager).sendToUser(eq("panpeixue"), contains("\"mediaList\":[]"));
     }
 
@@ -63,9 +61,7 @@ class ChatWebSocketHandlerTest {
         ChatWebSocketHandler handler = new ChatWebSocketHandler(sessionManager, chatService, userMapper);
         User sender = user(1L, "wangshuiqun", "王水群");
         User receiver = user(2L, "panpeixue", "潘佩雪");
-        when(session.getUri()).thenReturn(URI.create("ws://localhost:8081/ws/chat?username=wangshuiqun"));
-        when(userMapper.selectByUsername("wangshuiqun")).thenReturn(sender);
-        when(userMapper.selectAll()).thenReturn(List.of(sender, receiver));
+        mockAuthenticated(sender, receiver);
         ChatMessage saved = chat(124L, 1L, 2L, "");
         saved.setMediaList(List.of(
             new MomentMedia("image", "/static/uploads/2026/06/a.jpg", 1024, 768, null),
@@ -88,7 +84,6 @@ class ChatWebSocketHandlerTest {
         assertThat(sent.get(1).getType()).isEqualTo("video");
         assertThat(sent.get(1).getDuration()).isEqualTo(12.5);
 
-        // 广播给双方都带上 data.mediaList
         verify(sessionManager).sendToUser(eq("panpeixue"), contains("\"mediaList\":["));
         verify(sessionManager).sendToUser(eq("panpeixue"), contains("/static/uploads/2026/06/a.jpg"));
         verify(sessionManager).sendToUser(eq("panpeixue"), contains("/static/uploads/2026/06/b.mp4"));
@@ -99,9 +94,7 @@ class ChatWebSocketHandlerTest {
         ChatWebSocketHandler handler = new ChatWebSocketHandler(sessionManager, chatService, userMapper);
         User sender = user(1L, "wangshuiqun", "王水群");
         User receiver = user(2L, "panpeixue", "潘佩雪");
-        when(session.getUri()).thenReturn(URI.create("ws://localhost:8081/ws/chat?username=wangshuiqun"));
-        when(userMapper.selectByUsername("wangshuiqun")).thenReturn(sender);
-        when(userMapper.selectAll()).thenReturn(List.of(sender, receiver));
+        mockAuthenticated(sender, receiver);
 
         handler.handleTextMessage(session, new TextMessage("{\"type\":\"heart\"}"));
 
@@ -117,9 +110,7 @@ class ChatWebSocketHandlerTest {
         ChatWebSocketHandler handler = new ChatWebSocketHandler(sessionManager, chatService, userMapper);
         User sender = user(1L, "wangshuiqun", "王水群");
         User receiver = user(2L, "panpeixue", "潘佩雪");
-        when(session.getUri()).thenReturn(URI.create("ws://localhost:8081/ws/chat?username=wangshuiqun"));
-        when(userMapper.selectByUsername("wangshuiqun")).thenReturn(sender);
-        when(userMapper.selectAll()).thenReturn(List.of(sender, receiver));
+        mockAuthenticated(sender, receiver);
 
         handler.handleTextMessage(session, new TextMessage("__TML_HEART__"));
 
@@ -133,9 +124,7 @@ class ChatWebSocketHandlerTest {
         ChatWebSocketHandler handler = new ChatWebSocketHandler(sessionManager, chatService, userMapper);
         User sender = user(1L, "wangshuiqun", "王水群");
         User receiver = user(2L, "panpeixue", "潘佩雪");
-        when(session.getUri()).thenReturn(URI.create("ws://localhost:8081/ws/chat?username=wangshuiqun"));
-        when(userMapper.selectByUsername("wangshuiqun")).thenReturn(sender);
-        when(userMapper.selectAll()).thenReturn(List.of(sender, receiver));
+        mockAuthenticated(sender, receiver);
         when(chatService.saveChat(1L, 2L, "老文本", null))
             .thenReturn(chat(125L, 1L, 2L, "老文本"));
 
@@ -150,9 +139,7 @@ class ChatWebSocketHandlerTest {
         ChatWebSocketHandler handler = new ChatWebSocketHandler(sessionManager, chatService, userMapper);
         User sender = user(1L, "wangshuiqun", "王水群");
         User receiver = user(2L, "panpeixue", "潘佩雪");
-        when(session.getUri()).thenReturn(URI.create("ws://localhost:8081/ws/chat?username=wangshuiqun"));
-        when(userMapper.selectByUsername("wangshuiqun")).thenReturn(sender);
-        when(userMapper.selectAll()).thenReturn(List.of(sender, receiver));
+        mockAuthenticated(sender, receiver);
         when(chatService.saveChat(1L, 2L, "   ", null))
             .thenThrow(new IllegalArgumentException("Chat content and mediaList cannot both be empty"));
 
@@ -160,6 +147,28 @@ class ChatWebSocketHandlerTest {
 
         verify(chatService).saveChat(1L, 2L, "   ", null);
         verify(sessionManager).sendTo(eq(session), contains("\"type\":\"error\""));
+    }
+
+    @Test
+    void unsupportedJsonCommandReturnsErrorFrame() throws Exception {
+        ChatWebSocketHandler handler = new ChatWebSocketHandler(sessionManager, chatService, userMapper);
+        User sender = user(1L, "wangshuiqun", "王水群");
+        User receiver = user(2L, "panpeixue", "潘佩雪");
+        mockAuthenticated(sender, receiver);
+
+        handler.handleTextMessage(session, new TextMessage("{\"type\":\"unknown\"}"));
+
+        verifyNoInteractions(chatService);
+        verify(sessionManager).sendTo(eq(session), contains("\"type\":\"error\""));
+    }
+
+    private void mockAuthenticated(User sender, User receiver) {
+        Map<String, Object> attrs = new HashMap<>();
+        attrs.put("userId", sender.getId());
+        attrs.put("username", sender.getUsername());
+        when(session.getAttributes()).thenReturn(attrs);
+        when(userMapper.selectById(sender.getId())).thenReturn(sender);
+        when(userMapper.selectAll()).thenReturn(List.of(sender, receiver));
     }
 
     private User user(Long id, String username, String name) {

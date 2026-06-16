@@ -152,14 +152,14 @@ class PagingServiceTest {
         MessageServiceImpl service = new MessageServiceImpl(messageMapper, userMapper, sessionManager);
         Message m1 = message(1L, 2L, 1L, LocalDateTime.of(2026, 6, 14, 10, 0));
         Message m2 = message(2L, 1L, 1L, LocalDateTime.of(2026, 6, 13, 18, 0));
-        when(messageMapper.selectReceivedPage(1L, null, 21)).thenReturn(List.of(m1, m2));
+        when(messageMapper.selectReceivedPage(1L, null, null, 21)).thenReturn(List.of(m1, m2));
 
         MessagePageResponse page = service.getReceivedPage(1L, null, 20);
 
         assertThat(page.getList()).extracting("receiverId").containsOnly(1L);
         assertThat(page.getNextCursor()).isEqualTo("2026-06-13 18:00:00");
         assertThat(page.isHasMore()).isFalse();
-        verify(messageMapper).selectReceivedPage(1L, null, 21);
+        verify(messageMapper).selectReceivedPage(1L, null, null, 21);
     }
 
     @Test
@@ -167,13 +167,13 @@ class PagingServiceTest {
         MessageServiceImpl service = new MessageServiceImpl(messageMapper, userMapper, sessionManager);
         Message m1 = message(1L, 1L, 2L, LocalDateTime.of(2026, 6, 14, 10, 0));
         Message m2 = message(2L, 1L, 2L, LocalDateTime.of(2026, 6, 13, 18, 0));
-        when(messageMapper.selectSentPage(1L, null, 21)).thenReturn(List.of(m1, m2));
+        when(messageMapper.selectSentPage(1L, null, null, 21)).thenReturn(List.of(m1, m2));
 
         MessagePageResponse page = service.getSentPage(1L, null, 20);
 
         assertThat(page.getList()).extracting("senderId").containsOnly(1L);
         assertThat(page.getNextCursor()).isEqualTo("2026-06-13 18:00:00");
-        verify(messageMapper).selectSentPage(1L, null, 21);
+        verify(messageMapper).selectSentPage(1L, null, null, 21);
     }
 
     @Test
@@ -181,12 +181,12 @@ class PagingServiceTest {
         MessageServiceImpl service = new MessageServiceImpl(messageMapper, userMapper, sessionManager);
         LocalDateTime cursor = LocalDateTime.of(2026, 6, 12, 18, 0);
         Message older = message(3L, 2L, 1L, LocalDateTime.of(2026, 6, 12, 17, 59));
-        when(messageMapper.selectReceivedPage(1L, cursor, 21)).thenReturn(List.of(older));
+        when(messageMapper.selectReceivedPage(1L, cursor, null, 21)).thenReturn(List.of(older));
 
         MessagePageResponse page = service.getReceivedPage(1L, cursor, 20);
 
         assertThat(page.getList()).extracting("id").containsExactly(3L);
-        verify(messageMapper).selectReceivedPage(1L, cursor, 21);
+        verify(messageMapper).selectReceivedPage(1L, cursor, null, 21);
     }
 
     @Test
@@ -195,13 +195,13 @@ class PagingServiceTest {
         List<Message> rows = java.util.stream.IntStream.rangeClosed(1, 51)
             .mapToObj(i -> message((long) i, 2L, 1L, LocalDateTime.of(2026, 6, 14, 10, 0).minusMinutes(i)))
             .toList();
-        when(messageMapper.selectReceivedPage(1L, null, 51)).thenReturn(rows);
+        when(messageMapper.selectReceivedPage(1L, null, null, 51)).thenReturn(rows);
 
         MessagePageResponse page = service.getReceivedPage(1L, null, 99);
 
         assertThat(page.getList()).hasSize(50);
         assertThat(page.isHasMore()).isTrue();
-        verify(messageMapper).selectReceivedPage(1L, null, 51);
+        verify(messageMapper).selectReceivedPage(1L, null, null, 51);
     }
 
     private Diary diary(Long id, Long userId, LocalDateTime createTime, int isPrivate) {

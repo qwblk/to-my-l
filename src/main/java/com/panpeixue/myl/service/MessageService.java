@@ -11,7 +11,9 @@ public interface MessageService {
     List<Message> getReceived(Long userId);
     List<Message> getSent(Long userId);
     MessagePageResponse getReceivedPage(Long userId, LocalDateTime cursor, Integer size);
+    MessagePageResponse getReceivedPage(Long userId, LocalDateTime cursor, Long cursorId, Integer size);
     MessagePageResponse getSentPage(Long userId, LocalDateTime cursor, Integer size);
+    MessagePageResponse getSentPage(Long userId, LocalDateTime cursor, Long cursorId, Integer size);
     void markRead(Long messageId, Long userId);
     int countUnread(Long userId);
 }

@@ -25,7 +25,10 @@ public interface MessageMapper {
         "<script>",
         "SELECT m.*, u.name as sender_name FROM message m LEFT JOIN user u ON m.sender_id = u.id",
         "WHERE m.receiver_id = #{receiverId}",
-        "<if test='cursor != null'>AND m.create_time &lt; #{cursor}</if>",
+        "<if test='cursor != null and cursorId != null'>",
+        "  AND (m.create_time &lt; #{cursor} OR (m.create_time = #{cursor} AND m.id &lt; #{cursorId}))",
+        "</if>",
+        "<if test='cursor != null and cursorId == null'>AND m.create_time &lt; #{cursor}</if>",
         "ORDER BY m.create_time DESC, m.id DESC",
         "LIMIT #{limit}",
         "</script>"
@@ -33,13 +36,17 @@ public interface MessageMapper {
     @Results(@Result(column = "sender_name", property = "senderName"))
     List<Message> selectReceivedPage(@Param("receiverId") Long receiverId,
                                      @Param("cursor") LocalDateTime cursor,
+                                     @Param("cursorId") Long cursorId,
                                      @Param("limit") int limit);
 
     @Select({
         "<script>",
         "SELECT m.*, u.name as sender_name FROM message m LEFT JOIN user u ON m.sender_id = u.id",
         "WHERE m.sender_id = #{senderId}",
-        "<if test='cursor != null'>AND m.create_time &lt; #{cursor}</if>",
+        "<if test='cursor != null and cursorId != null'>",
+        "  AND (m.create_time &lt; #{cursor} OR (m.create_time = #{cursor} AND m.id &lt; #{cursorId}))",
+        "</if>",
+        "<if test='cursor != null and cursorId == null'>AND m.create_time &lt; #{cursor}</if>",
         "ORDER BY m.create_time DESC, m.id DESC",
         "LIMIT #{limit}",
         "</script>"
@@ -47,6 +54,7 @@ public interface MessageMapper {
     @Results(@Result(column = "sender_name", property = "senderName"))
     List<Message> selectSentPage(@Param("senderId") Long senderId,
                                  @Param("cursor") LocalDateTime cursor,
+                                 @Param("cursorId") Long cursorId,
                                  @Param("limit") int limit);
 
     @Select("SELECT * FROM message WHERE id = #{id}")

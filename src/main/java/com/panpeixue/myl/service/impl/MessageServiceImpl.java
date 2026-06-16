@@ -68,15 +68,25 @@ public class MessageServiceImpl implements MessageService {
 
     @Override
     public MessagePageResponse getReceivedPage(Long userId, LocalDateTime cursor, Integer size) {
+        return getReceivedPage(userId, cursor, null, size);
+    }
+
+    @Override
+    public MessagePageResponse getReceivedPage(Long userId, LocalDateTime cursor, Long cursorId, Integer size) {
         int pageSize = clampSize(size);
-        List<Message> rows = messageMapper.selectReceivedPage(userId, cursor, pageSize + 1);
+        List<Message> rows = messageMapper.selectReceivedPage(userId, cursor, cursorId, pageSize + 1);
         return toPage(rows, pageSize);
     }
 
     @Override
     public MessagePageResponse getSentPage(Long userId, LocalDateTime cursor, Integer size) {
+        return getSentPage(userId, cursor, null, size);
+    }
+
+    @Override
+    public MessagePageResponse getSentPage(Long userId, LocalDateTime cursor, Long cursorId, Integer size) {
         int pageSize = clampSize(size);
-        List<Message> rows = messageMapper.selectSentPage(userId, cursor, pageSize + 1);
+        List<Message> rows = messageMapper.selectSentPage(userId, cursor, cursorId, pageSize + 1);
         return toPage(rows, pageSize);
     }
 

@@ -55,9 +55,11 @@ token 的过期机制是双闸门：
 
 ### WebSocket
 
-当前 `/ws/chat` 通过 query 参数 `?username=xxx` 建立连接，**不参与 SaToken 的过期判断**。HTTP 401 不会自动断开 WebSocket。
+当前 `/ws/chat` 通过 query 参数 `?token=xxx` 建立连接，后端会在握手时用 SaToken 校验 token 并解析当前用户。
 
-如果以后需要严格按 token 生命周期管理 WebSocket，可以扩展为 `?token=xxx` 并在握手时 `StpUtil.checkLogin(token)`，这次没改。
+- token 有效：连接建立，后端从 token 绑定用户身份
+- token 无效 / 过期：后端发 `type=error`，随后 close code `4003`
+- 同账号新连接：旧连接收到 `type=kicked`，随后 close code `4001`
 
 ---
 
@@ -440,8 +442,11 @@ data 为 null。
 漂流瓶收件箱分页。
 
 参数：
-- `cursor`: `yyyy-MM-dd HH:mm:ss`，可选；传了表示只返回 `create_time < cursor` 的消息，避免重复
+- `cursor`: `yyyy-MM-dd HH:mm:ss`，可选；上一页返回的 `nextCursor`
+- `cursorId`: number，可选；上一页返回的 `nextCursorId`
 - `size`: 默认 20，最大 50（超过会 clamp 到 50）
+
+> 推荐前端同时传 `cursor + cursorId`，这样同一秒内多条消息不会漏。只传旧版 `cursor` 也兼容，但同秒边界仍可能跳过剩余消息。
 
 规则：
 - 只返回 `receiver_id = 当前用户`
@@ -455,6 +460,7 @@ data 为 null。
   "data": {
     "list": [ /* Message[] */ ],
     "nextCursor": "2026-06-12 18:00:00",
+    "nextCursorId": 123,
     "hasMore": true
   }
 }
@@ -477,8 +483,11 @@ data 为 null。
 聊天历史分页接口（登录用户）。
 
 参数：
-- `cursor`: `yyyy-MM-dd HH:mm:ss`，可选；传了表示只返回 `create_time < cursor`
+- `cursor`: `yyyy-MM-dd HH:mm:ss`，可选；上一页返回的 `nextCursor`
+- `cursorId`: number，可选；上一页返回的 `nextCursorId`
 - `size`: 默认 30，最大 50（超过会 clamp 到 50）
+
+> 推荐前端同时传 `cursor + cursorId`，查询条件会使用 `(create_time < cursor OR (create_time = cursor AND id < cursorId))`，避免同一秒内多条消息翻页时丢数据。只传旧版 `cursor` 也兼容。
 
 规则：
 - 当前用户只能查询自己和对方之间的消息
@@ -486,6 +495,7 @@ data 为 null。
 - 排序：`create_time DESC, id DESC`
 - 后端多查 `size + 1` 判断 `hasMore`
 - `nextCursor` = 本页最后一条消息的 `createTime`
+- `nextCursorId` = 本页最后一条消息的 `id`
 - 前端收到后可按 `createTime ASC` 显示
 
 响应：
@@ -508,6 +518,7 @@ data 为 null。
       }
     ],
     "nextCursor": "2026-06-12 18:00:00",
+    "nextCursorId": 123,
     "hasMore": true
   }
 }
@@ -515,7 +526,15 @@ data 为 null。
 
 ### WebSocket `/ws/chat`
 
-WebSocket 端点：`ws://<host>:8081/ws/chat?username=<username>`（免鉴权，靠 query 带身份；项目内私域，不强校验）。
+WebSocket 端点：`ws://<host>:8081/ws/chat?token=<token>`。
+
+> 现在 WS 握手必须带有效 SaToken，不再接受 `?username=` 作为身份来源。后端会从 token 解析当前用户，避免伪造 username 读取聊天历史或踢掉真实用户。
+>
+> 浏览器 WebSocket 无法自定义 Header，前端用 query 参数即可：
+> ```ts
+> const ws = new WebSocket(`${WS_BASE}/ws/chat?token=${encodeURIComponent(token)}`)
+> ```
+> 非浏览器客户端也可以用 Header `Authorization: <token>`。token 过期/无效时后端会先发 `type=error`，随后 close code `4003`。
 
 前端发送（推荐 JSON）：
 ```jsonc

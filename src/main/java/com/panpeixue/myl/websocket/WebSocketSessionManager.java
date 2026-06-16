@@ -77,15 +77,17 @@ public class WebSocketSessionManager {
         }
     }
 
-    public void remove(String username, WebSocketSession session) {
-        if (session == null) return;
+    public boolean remove(String username, WebSocketSession session) {
+        if (session == null) return false;
         String sid = session.getId();
         sessions.remove(sid);
         // 旧连接被 kick 后会异步触发 afterConnectionClosed；此时 userMap 可能已经指向新连接。
         // 只能在映射仍指向当前 session 时移除，避免把后来者从在线表里误删。
         if (sid != null && sid.equals(userMap.get(username))) {
             userMap.remove(username);
+            return true;
         }
+        return false;
     }
 
     /** 测试辅助：清空全部连接状态。生产代码不要调。 */

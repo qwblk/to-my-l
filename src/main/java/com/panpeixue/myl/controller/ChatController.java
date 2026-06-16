@@ -26,8 +26,9 @@ public class ChatController {
     public Result<ChatHistoryResponse> history(
             @RequestParam(required = false)
             @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime cursor,
+            @RequestParam(required = false) Long cursorId,
             @RequestParam(required = false) Integer size) {
         long userId = StpUtil.getLoginIdAsLong();
-        return Result.ok(chatService.history(userId, cursor, size));
+        return Result.ok(chatService.history(userId, cursor, cursorId, size));
     }
 }
