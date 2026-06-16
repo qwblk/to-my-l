@@ -21,6 +21,46 @@
 
 ---
 
+## 认证 / Token 生命周期
+
+后端用 SaToken，token 通过 `Authorization` 请求头携带（值就是 `/user/login` 返回的 `data.token`，**不需要加 `Bearer` 前缀**）。
+
+token 的过期机制是双闸门：
+
+| 名称 | 当前值 | 含义 |
+|---|---|---|
+| 绝对过期 `timeout` | 30 天 | 从 token **创建那一刻**开始倒计时，**不会被任何活动重置**。到点必须重新登录 —— 安全防线 |
+| 活跃过期 `active-timeout` | 7 天 | 每次该 token 命中受保护接口都会**自动重置**这个倒计时（开启了滑动续期 `auto-renew=true`）。换句话说只要至少每 7 天有一次请求，就一直续命 |
+
+实际效果：
+
+- 用户日常使用 → 30 秒一次心跳 + 各种接口操作 → 活跃过期被持续重置 → 不会过期
+- 锁屏 / 周末 / 出差几天没动 → 仍在 7 天内 → 下次请求自动续期，无感
+- 离开超过 7 天 → 活跃过期触发 → 下次请求返 `401 Please login first`，前端按"登录过期"处理
+- 累计使用超过 30 天 → 即使一直活跃，绝对过期触发 → 强制 `401`
+
+> 滑动续期由 SaToken 内置完成，**不会签发新 token**，前端不需要换 token 也无需任何处理。
+
+### 错误码区分
+
+| code | 触发场景 |
+|---|---|
+| 401 `Please login first` | 没带 token、token 无效、活跃过期、绝对过期 |
+| 4012 `Logged in elsewhere` | 同账号在新设备登录把当前 token 顶下线（与 `is-concurrent: false` 配合） |
+
+前端拦截器建议：
+
+- `401` → 清 token，跳登录页
+- `4012` → 清 token，弹"账号已在其他设备登录，请重新登录"，跳登录页
+
+### WebSocket
+
+当前 `/ws/chat` 通过 query 参数 `?username=xxx` 建立连接，**不参与 SaToken 的过期判断**。HTTP 401 不会自动断开 WebSocket。
+
+如果以后需要严格按 token 生命周期管理 WebSocket，可以扩展为 `?token=xxx` 并在握手时 `StpUtil.checkLogin(token)`，这次没改。
+
+---
+
 ## 用户 `/user`
 
 ### `POST /user/login` —— 登录（免鉴权）
@@ -41,22 +81,51 @@
 
 > ⚠️ 登录**不会**更新 `last_seen_at`。前端先调 `GET /user/last-seen` 拿上次离开时间，再调 `PUT /user/heartbeat` 推到 NOW。
 
+> 🔐 **单点登录策略**：同一账号在新设备登录会让旧设备的 token 立即失效。
+> - 旧 token 后续调任何受保护接口会返回 `code: 4012, msg: "Logged in elsewhere"`
+> - 旧 WebSocket 连接会先收到一帧 `type: "kicked"`，然后被 close（close code = `4001`）
+> - 新设备照常工作；登录响应不变
+
 ### `GET /user/me`
 
 响应 data 是当前登录用户：
 ```json
 {
   "id": 1, "name": "王水群", "gender": 1, "username": "wangshuiqun",
-  "birthday": "2006-07-29", "bio": "...", "isFirstLogin": 0,
+  "birthday": "2006-07-29",
+  "bio": "...",                         // deprecated；内部仍落 user.bio 列
+  "profileText": "这里是一段写给对方的话", // 新字段名，值和 bio 相同
+  "isFirstLogin": 0,
   "lastSeenAt": "2026-06-13 23:45:12",
   "createTime": "2026-05-01 10:00:00",
   "updateTime": "2026-06-13 23:45:12"
 }
 ```
 
+### `PUT /user/me`
+
+修改当前登录用户自己的资料。只能改自己，后端从 token 取 userId，不接受 body 里的 id。
+
+请求：
+```json
+{
+  "name": "王水群",
+  "gender": 1,
+  "birthday": "2002-01-01",
+  "profileText": "这里是一段很长的话..."
+}
+```
+
+规则：
+- `name` 必填，trim 后不能为空
+- `gender` 可为空；不为空时只能是 `0` 或 `1`
+- `birthday` 格式 `yyyy-MM-dd`
+- `profileText` 可为空字符串，最大长度 10000
+- 成功返回更新后的 User，并清理当前用户 `userCache`
+
 ### `GET /user/{id}`、`GET /user/list`
 
-返回单个 / 全部用户（同上结构，密码字段不返回）。
+返回单个 / 全部用户（同上结构，密码字段不返回）。双方都可看到对方 `profileText`。
 
 ### `PUT /user/password`
 
@@ -66,8 +135,10 @@
 
 ### `PUT /user/info`
 
+旧接口别名，继续保留兼容；新前端建议使用 `PUT /user/me`。
+
 ```json
-{ "name": "...", "gender": 0|1, "birthday": "yyyy-MM-dd", "bio": "..." }
+{ "name": "...", "gender": 0|1, "birthday": "yyyy-MM-dd", "profileText": "..." }
 ```
 
 ### `PUT /user/heartbeat`
@@ -257,6 +328,34 @@ data 为 null。
   "content": "Diary deleted",
   "type": "diary_delete",
   "data": { "diaryId": 123, "userId": 1 }
+}
+```
+
+### `PUT /diary/{diaryId}/privacy`
+
+只改 `is_private` 一个字段，不会覆盖正文。
+
+请求：
+```json
+{ "isPrivate": 0 }   // 或 1
+```
+
+权限 / 返回：
+- 只能改自己写的日记；改别人的 → `code=403, msg="No permission"`
+- 不存在或已软删 → `code=404, msg="Diary not found"`
+- `isPrivate` 不是 0 或 1 → `code=400`
+- 成功 → `{ "code": 200, "msg": "success", "data": Diary }`
+
+行为：
+- `diary.is_private = 入参`
+- 清缓存 `diaryList`
+- 广播 WS：
+```json
+{
+  "sender": "SYSTEM",
+  "content": "Diary updated",
+  "type": "diary",
+  "data": { "diaryId": 123, "userId": 1, "isPrivate": 1 }
 }
 ```
 
@@ -480,10 +579,30 @@ WebSocket 端点：`ws://<host>:8081/ws/chat?username=<username>`（免鉴权，
 - `history` —— 连接建立后下发的历史
 - `online` / `offline` —— 上下线广播
 - `status` —— 当前在线列表
+- `kicked` —— 被同账号新登录顶下线（详见下面）
 - `moment` —— 新动态广播
 - `moment_delete` —— 动态软删除广播（`data: { momentId, userId }`）
 - `diary_delete` —— 日记软删除广播（`data: { diaryId, userId }`）
 - `like` / `comment` —— 互动广播
+
+#### `kicked` 事件
+
+同账号在新设备建立 WebSocket 连接时，旧连接会先收到这一帧、紧接着被 `close(4001)`：
+
+```jsonc
+{
+  "sender": "SYSTEM",
+  "content": "Logged in elsewhere",
+  "time": "22:10:03",
+  "type": "kicked",
+  "data": { "at": "2026-06-14 22:10:03" }
+}
+```
+
+前端建议：
+- 收到 `type: "kicked"` 立即弹"已在其他设备登录"提示
+- 监听 `onclose`，如果 `event.code === 4001` 也按"被踢下线"处理（防止 `kicked` 帧因网络延迟未到达）
+- 不要自动重连（重连会触发新一轮踢自己），引导用户重新登录
 
 > 后端用 `ConcurrentWebSocketSessionDecorator` 包了每个 session，多用户并发上线/广播不会再触发 `TEXT_PARTIAL_WRITING` 异常。
 
@@ -500,6 +619,7 @@ WebSocket 端点：`ws://<host>:8081/ws/chat?username=<username>`（免鉴权，
 | 405 | 方法不支持 | 用错 HTTP 方法 |
 | 413 | 文件过大 | 图片 > 10MB、视频 > 50MB |
 | 415 | 文件类型不支持 | 上传白名单外的 mime |
+| 4012 | 被顶下线 | 同账号在另一设备新登录，旧 token 调接口时返回 |
 | 500 | 服务器错误 | DB / 文件系统异常 |
 
 ---

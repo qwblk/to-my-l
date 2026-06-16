@@ -65,6 +65,29 @@ public class DiaryServiceImpl implements DiaryService {
     }
 
     @Override
+    @Transactional
+    @CacheEvict(value = "diaryList", allEntries = true)
+    public Diary updatePrivacy(Long diaryId, Long userId, Integer isPrivate) {
+        if (isPrivate == null || (isPrivate != 0 && isPrivate != 1)) {
+            throw new IllegalArgumentException("isPrivate must be 0 or 1");
+        }
+        Diary diary = diaryMapper.selectById(diaryId);
+        if (diary == null || diary.getDeletedAt() != null) {
+            throw BizException.notFound("Diary not found");
+        }
+        if (!diary.getUserId().equals(userId)) {
+            throw BizException.forbidden("No permission");
+        }
+
+        diaryMapper.updatePrivacy(diaryId, isPrivate);
+        sessionManager.broadcast(ChatWebSocketHandler.buildJson("SYSTEM",
+            "Diary updated", "diary",
+            "{\"diaryId\":" + diaryId + ",\"userId\":" + userId
+                + ",\"isPrivate\":" + isPrivate + "}"));
+        return diaryMapper.selectById(diaryId);
+    }
+
+    @Override
     @Cacheable(value = "diaryList", key = "#currentUserId", sync = true)
     public List<Diary> listAll(Long currentUserId) {
         return diaryMapper.selectAll().stream()

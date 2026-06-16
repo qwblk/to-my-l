@@ -43,6 +43,13 @@ public class DiaryController {
         return Result.ok();
     }
 
+    @PutMapping("/{diaryId}/privacy")
+    public Result<Diary> updatePrivacy(@PathVariable Long diaryId,
+                                       @RequestBody java.util.Map<String, Integer> body) {
+        long userId = StpUtil.getLoginIdAsLong();
+        return Result.ok(diaryService.updatePrivacy(diaryId, userId, body.get("isPrivate")));
+    }
+
     @GetMapping("/days")
     public Result<DiaryDaysResponse> listDays(
             @RequestParam(defaultValue = "all") String scope,

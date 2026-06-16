@@ -10,6 +10,7 @@ import java.util.List;
 public interface DiaryService {
     Diary create(Diary diary);
     void delete(Long diaryId, Long userId);
+    Diary updatePrivacy(Long diaryId, Long userId, Integer isPrivate);
     List<Diary> listAll(Long currentUserId);
     List<Diary> listByUser(Long userId);
     DiaryDaysResponse listDays(Long currentUserId, String scope, LocalDate cursorDate, Integer size);

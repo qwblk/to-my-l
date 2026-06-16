@@ -138,9 +138,9 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     }
 
     private String buildHeartJson(User sender, User receiver) {
-        String data = "{\"senderId\":" + sender.getId()
-            + ",\"receiverId\":" + receiver.getId() + "}";
-        return buildJson(sender.getName(), "heart", "heart", data);
+        // heart 不入库，也不需要身份数据；前端只看 type/content/time。
+        // 身份如有需要可从 sender 文案判断，data 保持空对象以匹配前端契约。
+        return buildJson(sender.getName(), "heart", "heart", "{}");
     }
 
     private String toChatMessageJson(ChatMessage m) {

@@ -45,6 +45,9 @@ public interface DiaryMapper {
     @Update("UPDATE diary SET deleted_at = NOW() WHERE id = #{id} AND deleted_at IS NULL")
     int softDelete(@Param("id") Long id);
 
+    @Update("UPDATE diary SET is_private = #{isPrivate} WHERE id = #{id} AND deleted_at IS NULL")
+    int updatePrivacy(@Param("id") Long id, @Param("isPrivate") Integer isPrivate);
+
     /**
      * scope=all 可见日期：自己的全部 + 对方非私密，且未软删。
      * cursorDate 语义：只取 date < cursorDate，避免翻页重复上一页最后一天。

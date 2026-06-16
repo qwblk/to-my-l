@@ -109,6 +109,7 @@ class ChatWebSocketHandlerTest {
         verify(sessionManager).sendToUser(eq("wangshuiqun"), contains("\"type\":\"heart\""));
         verify(sessionManager).sendToUser(eq("panpeixue"), contains("\"type\":\"heart\""));
         verify(sessionManager).sendToUser(eq("panpeixue"), contains("\"content\":\"heart\""));
+        verify(sessionManager).sendToUser(eq("panpeixue"), contains("\"data\":{}"));
     }
 
     @Test

@@ -44,6 +44,12 @@ public class User implements Serializable {
     public void setBirthday(LocalDate birthday) { this.birthday = birthday; }
     public String getBio() { return bio; }
     public void setBio(String bio) { this.bio = bio; }
+    /**
+     * profileText 是前端新字段名；数据库沿用已有 bio 列，避免额外迁移。
+     * get/set 都代理到 bio，所以 GET /user/me 和 GET /user/{id} 会同时带 bio/profileText。
+     */
+    public String getProfileText() { return bio; }
+    public void setProfileText(String profileText) { this.bio = profileText; }
     public Integer getIsFirstLogin() { return isFirstLogin; }
     public void setIsFirstLogin(Integer isFirstLogin) { this.isFirstLogin = isFirstLogin; }
     public LocalDateTime getLastSeenAt() { return lastSeenAt; }

@@ -45,6 +45,12 @@ public class UserController {
         return Result.ok(userService.getById(userId));
     }
 
+    @PutMapping("/me")
+    public Result<User> updateMe(@RequestBody User update) {
+        long userId = StpUtil.getLoginIdAsLong();
+        return Result.ok(userService.updateInfo(userId, update));
+    }
+
     @GetMapping("/{id}")
     public Result<User> getById(@PathVariable Long id) {
         return Result.ok(userService.getById(id));

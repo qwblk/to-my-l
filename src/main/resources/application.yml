@@ -63,8 +63,14 @@ mybatis:
 
 sa-token:
   token-name: ${SA_TOKEN_NAME:Authorization}
-  timeout: ${SA_TOKEN_TIMEOUT:604800}
-  active-timeout: ${SA_TOKEN_ACTIVE_TIMEOUT:1800}
+  # 绝对过期：从 token 创建那一刻倒计时，不重置。
+  # 无论用户多活跃，到点必须重新登录 —— 是最后一道安全防线。
+  timeout: ${SA_TOKEN_TIMEOUT:2592000}            # 30d
+  # 活跃过期：每次该 token 命中受保护接口时，SaToken 自动把这个倒计时重置。
+  # 配合 auto-renew=true，「30s 心跳 + 用户随手点几下」就能让登录一直续命。
+  active-timeout: ${SA_TOKEN_ACTIVE_TIMEOUT:604800}  # 7d
+  # 滑动续期开关。开启后每次校验通过时自动 renewTimeout，前端无需换 token。
+  auto-renew: ${SA_TOKEN_AUTO_RENEW:true}
   is-concurrent: false
   is-share: false
   token-style: random-64

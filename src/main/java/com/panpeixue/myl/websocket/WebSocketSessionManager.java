@@ -7,6 +7,8 @@ import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.ConcurrentWebSocketSessionDecorator;
 
 import java.io.IOException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -31,28 +33,65 @@ public class WebSocketSessionManager {
     private static final int SEND_BUFFER = 512 * 1024;
     private static final int SEND_TIMEOUT_MS = 1000;
 
+    private static final DateTimeFormatter KICKED_AT_FMT =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
+    /**
+     * 自定义 close code：被同账号在另一台设备的新连接顶下线。
+     * RFC 6455 规定 4000-4999 是应用自定义码段，前端按 event.code === 4001 来识别。
+     */
+    private static final CloseStatus KICKED = new CloseStatus(4001, "Logged in elsewhere");
+
     private static final Map<String, WebSocketSession> sessions = new ConcurrentHashMap<>();
     private static final Map<String, String> userMap = new ConcurrentHashMap<>();
 
     public void add(String username, WebSocketSession session) {
         // kick old session if same user is already online
-        String oldSid = userMap.get(username);
-        if (oldSid != null) {
-            WebSocketSession oldSession = sessions.get(oldSid);
-            if (oldSession != null && oldSession.isOpen()) {
-                try { oldSession.close(CloseStatus.NORMAL); } catch (IOException ignored) {}
-            }
-            sessions.remove(oldSid);
-        }
+        kickExisting(username);
         WebSocketSession safe = new ConcurrentWebSocketSessionDecorator(
                 session, SEND_TIMEOUT_MS, SEND_BUFFER);
         sessions.put(session.getId(), safe);
         userMap.put(username, session.getId());
     }
 
+    /**
+     * 同账号新连接进来时把旧连接踢掉：
+     *   1. 先发一帧 kicked，让前端能弹"已在其他设备登录"提示
+     *   2. 立即 close(4001)，让前端的 onclose 拿到明确事件码而不是模糊的 1000
+     *
+     * 失败安静处理 —— 旧连接可能已经断了/网络坏了，不要让踢人流程影响到新连接的 add。
+     */
+    private void kickExisting(String username) {
+        String oldSid = userMap.remove(username);
+        if (oldSid == null) return;
+        WebSocketSession oldSession = sessions.remove(oldSid);
+        if (oldSession == null) return;
+        if (oldSession.isOpen()) {
+            String at = LocalDateTime.now().format(KICKED_AT_FMT);
+            String json = String.format(
+                "{\"sender\":\"SYSTEM\",\"content\":\"Logged in elsewhere\","
+                + "\"time\":\"%s\",\"type\":\"kicked\",\"data\":{\"at\":\"%s\"}}",
+                at.substring(11), at);
+            try { oldSession.sendMessage(new TextMessage(json)); } catch (IOException ignored) {}
+            try { oldSession.close(KICKED); } catch (IOException ignored) {}
+        }
+    }
+
     public void remove(String username, WebSocketSession session) {
-        sessions.remove(session.getId());
-        userMap.remove(username);
+        if (session == null) return;
+        String sid = session.getId();
+        sessions.remove(sid);
+        // 旧连接被 kick 后会异步触发 afterConnectionClosed；此时 userMap 可能已经指向新连接。
+        // 只能在映射仍指向当前 session 时移除，避免把后来者从在线表里误删。
+        if (sid != null && sid.equals(userMap.get(username))) {
+            userMap.remove(username);
+        }
+    }
+
+    /** 测试辅助：清空全部连接状态。生产代码不要调。 */
+    void clearAll() {
+        sessions.clear();
+        userMap.clear();
     }
 
     public int count() { return userMap.size(); }

@@ -22,8 +22,20 @@ public class GlobalExceptionHandler {
 
     // ==================== Sa-Token ====================
 
+    /**
+     * sa-token 抛 NotLoginException 时按 type 分流：
+     *   BE_REPLACED / KICK_OUT —— 被顶下线 / 被强制踢下线，返回 4012 让前端弹专门提示
+     *   其它（NOT_TOKEN / INVALID_TOKEN / TOKEN_TIMEOUT / TOKEN_FREEZE 等）—— 401，前端走"未登录"分支
+     *
+     * 4012 这条对前端的契约是「曾经登录但被挤掉」，前端要展示"已在其他设备登录"等提示再跳登录页。
+     */
     @ExceptionHandler(NotLoginException.class)
     public Result<?> handleNotLogin(NotLoginException e) {
+        if (NotLoginException.BE_REPLACED.equals(e.getType())
+                || NotLoginException.KICK_OUT.equals(e.getType())) {
+            log.warn("Logged in elsewhere: {}", e.getMessage());
+            return Result.error(4012, "Logged in elsewhere");
+        }
         log.warn("Not login: {}", e.getMessage());
         return Result.error(401, "Please login first");
     }

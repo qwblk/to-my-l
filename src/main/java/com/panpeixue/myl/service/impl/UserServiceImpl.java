@@ -25,6 +25,7 @@ public class UserServiceImpl implements UserService {
 
     private static final Logger log = LoggerFactory.getLogger(UserServiceImpl.class);
     private static final BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
+    private static final int PROFILE_TEXT_MAX_LENGTH = 10_000;
     private final UserMapper userMapper;
     private final WebSocketSessionManager sessionManager;
 
@@ -105,6 +106,15 @@ public class UserServiceImpl implements UserService {
         if (update.getName() == null || update.getName().isBlank()) {
             throw new IllegalArgumentException("Name cannot be empty");
         }
+        if (update.getGender() != null && update.getGender() != 0 && update.getGender() != 1) {
+            throw new IllegalArgumentException("Gender must be 0 or 1");
+        }
+        String profileText = update.getProfileText();
+        if (profileText != null && profileText.length() > PROFILE_TEXT_MAX_LENGTH) {
+            throw new IllegalArgumentException("Profile text length cannot exceed " + PROFILE_TEXT_MAX_LENGTH);
+        }
+        update.setName(update.getName().trim());
+        update.setBio(profileText == null ? null : profileText);
         update.setId(userId);
         userMapper.updateInfo(update);
         log.info("User {} updated info", userId);
