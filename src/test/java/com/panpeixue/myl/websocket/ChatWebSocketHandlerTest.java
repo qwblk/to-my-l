@@ -162,6 +162,53 @@ class ChatWebSocketHandlerTest {
         verify(sessionManager).sendTo(eq(session), contains("\"type\":\"error\""));
     }
 
+    /* ------------------------------------------------------------------------
+     * 新 presence 协议（按 userId 路由，不再依赖 displayName 字符串匹配）：
+     *   - status.data.online 是 [{userId,name}, ...]，单 / 空场景都不再产出 [""]
+     *   - online / offline 帧 data 里带 userId，前端可直接按 ID 过滤
+     * ------------------------------------------------------------------------ */
+    @Test
+    void onlineList_emptyWhenAlone() {
+        ChatWebSocketHandler handler = new ChatWebSocketHandler(sessionManager, chatService, userMapper);
+        when(sessionManager.onlineUsers()).thenReturn(java.util.Set.of("wangshuiqun"));
+        // 自己不在结果里，userMapper 也就不会被查；不必 stub。
+
+        String json = handler.onlineListJson("wangshuiqun");
+
+        // 关键回归点：旧实现会得到 [""]，新实现必须是 []。
+        assertThat(json).isEqualTo("[]");
+    }
+
+    @Test
+    void onlineList_emitsObjectWithUserIdAndName() {
+        ChatWebSocketHandler handler = new ChatWebSocketHandler(sessionManager, chatService, userMapper);
+        User other = user(2L, "panpeixue", "潘佩雪");
+        when(sessionManager.onlineUsers())
+            .thenReturn(java.util.Set.of("wangshuiqun", "panpeixue"));
+        when(userMapper.selectByUsername("panpeixue")).thenReturn(other);
+
+        String json = handler.onlineListJson("wangshuiqun");
+
+        assertThat(json)
+            .contains("\"userId\":2")
+            .contains("\"name\":\"潘佩雪\"")
+            .doesNotContain("\"\""); // 不能有任何裸空串 slot
+    }
+
+    @Test
+    void onlineList_skipsEntryWhenUserMissingFromDb() {
+        // 极端情形：sessions map 里有 username 但库里查不到（被删号但 ws 还活着）
+        // 旧协议会塞一个空 slot 进去；新协议必须直接跳过。
+        ChatWebSocketHandler handler = new ChatWebSocketHandler(sessionManager, chatService, userMapper);
+        when(sessionManager.onlineUsers())
+            .thenReturn(java.util.Set.of("wangshuiqun", "ghost"));
+        when(userMapper.selectByUsername("ghost")).thenReturn(null);
+
+        String json = handler.onlineListJson("wangshuiqun");
+
+        assertThat(json).isEqualTo("[]");
+    }
+
     private void mockAuthenticated(User sender, User receiver) {
         Map<String, Object> attrs = new HashMap<>();
         attrs.put("userId", sender.getId());

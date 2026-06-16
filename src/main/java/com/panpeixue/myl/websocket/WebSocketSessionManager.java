@@ -121,6 +121,26 @@ public class WebSocketSessionManager {
         }
     }
 
+    /**
+     * 广播给除自己以外的所有连接。用于 online 上线广播：
+     * 当事人客户端在 ws.onopen 时已经知道自己是 online 的，再回灌一份"自己 online"
+     * 反而让前端要做"是不是我自己"的过滤逻辑（这正是当前用 displayName 做识别踩坑的源头）。
+     *
+     * self 为 null 时退化成 broadcast()，让调用方不必特判。
+     */
+    public void broadcastExcept(WebSocketSession self, String json) {
+        if (self == null) { broadcast(json); return; }
+        String selfId = self.getId();
+        TextMessage msg = new TextMessage(json);
+        for (Map.Entry<String, WebSocketSession> e : sessions.entrySet()) {
+            if (selfId.equals(e.getKey())) continue;
+            WebSocketSession s = e.getValue();
+            if (s.isOpen()) {
+                try { s.sendMessage(msg); } catch (IOException ignored) {}
+            }
+        }
+    }
+
     public void sendTo(WebSocketSession session, String json) {
         // 调用方传进来的是 Spring 回调里的 raw session；为了和 broadcast 走同一把锁，
         // 这里用它的 id 去 sessions map 里取出 decorator 再发。如果还没 add（理论上

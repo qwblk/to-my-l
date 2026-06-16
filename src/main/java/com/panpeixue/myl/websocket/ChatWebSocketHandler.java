@@ -24,7 +24,6 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 @Component
 public class ChatWebSocketHandler extends TextWebSocketHandler {
@@ -71,15 +70,16 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
         pushHistory(session, user.getId());
 
-        /* tell everyone this user is now online */
-        sessionManager.broadcast(buildJson(user.getName(), "is now online", "online", null));
+        /* 上线广播：发给除自己以外的所有人，避免前端被迫"识别这是不是自己"。
+         * data.userId 是稳定标识——前端按 ID 路由 presence，不再依赖 displayName 字符串匹配。 */
+        sessionManager.broadcastExcept(session, buildJson(
+            user.getName(), "is now online", "online",
+            "{\"userId\":" + user.getId() + "}"));
 
-        /* tell THIS user who else is already online */
-        Set<String> others = sessionManager.onlineUsers();
-        others.remove(username);
-        String list = others.isEmpty() ? "" : String.join("\",\"", others);
+        /* 给本人推一份当前在线列表（不含自己）。新协议：data.online 是 [{userId,name}, ...]
+         * —— 老协议拼接 String.join 的方式在列表为空时会产出 [""]，前端会被空串误判成"对方在线"。 */
         sessionManager.sendTo(session, buildJson("SYSTEM", "Current online", "status",
-            "{\"online\":[\"" + list + "\"]}"));
+            "{\"online\":" + onlineListJson(username) + "}"));
     }
 
     @Override
@@ -120,11 +120,43 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
         String username = (String) session.getAttributes().get(ATTR_USERNAME);
         if (username == null) return;
+        Long userId = (Long) session.getAttributes().get(ATTR_USER_ID);
         boolean removedCurrent = sessionManager.remove(username, session);
         log.info("{} disconnected, online: {}", username, sessionManager.count());
         if (removedCurrent) {
-            sessionManager.broadcast(buildJson(displayName(username), "is now offline", "offline", null));
+            // 离开者的 session 已经在关闭流程里，不必再 except —— 用普通 broadcast 即可。
+            // data.userId 让前端无歧义识别"是谁离开了"，老 displayName 路径仍可解析 sender。
+            String extra = userId == null ? null : "{\"userId\":" + userId + "}";
+            sessionManager.broadcast(buildJson(displayName(username), "is now offline", "offline", extra));
         }
+    }
+
+    /**
+     * 构造 status 帧的 data.online 数组（不含自己）：
+     *   [{"userId":1,"name":"王水群"}, ...]   或者   []
+     *
+     * 旧实现用 String.join 拼字符串数组，列表为空时会得到 [""]，前端会把空串当成
+     * 一个"在线但没名字"的对方，导致 presence 误判。这里用 userId 作为稳定标识，
+     * 名字 fallback 到 username（防 sessions map 里残留没设 displayName 的 entry —— 顺手回答了
+     * 协议讨论里的"空 slot 是哪儿来的"）。
+     *
+     * package-private 是为了直接做单元测试，不必走握手路径。
+     */
+    String onlineListJson(String selfUsername) {
+        StringBuilder sb = new StringBuilder("[");
+        boolean first = true;
+        for (String username : sessionManager.onlineUsers()) {
+            if (username.equals(selfUsername)) continue;
+            User u = userMapper.selectByUsername(username);
+            if (u == null) continue;          // session 在但库里查不到，跳过而不是塞空 slot
+            if (!first) sb.append(',');
+            first = false;
+            String name = u.getName() == null || u.getName().isBlank() ? username : u.getName();
+            sb.append("{\"userId\":").append(u.getId())
+              .append(",\"name\":\"").append(esc(name)).append("\"}");
+        }
+        sb.append(']');
+        return sb.toString();
     }
 
     private void pushHistory(WebSocketSession session, Long userId) {
