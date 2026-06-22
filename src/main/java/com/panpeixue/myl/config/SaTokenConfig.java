@@ -19,7 +19,10 @@ public class SaTokenConfig {
                 .addInclude("/**")
                 .addExclude(
                         "/favicon.ico",
+                        "/health",
+                        "/api/health",
                         "/user/login",
+                        "/analytics/event",
                         "/ws/**",
                         "/chat.html",
                         "/uploads/**",
