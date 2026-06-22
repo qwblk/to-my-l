@@ -15,6 +15,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
 class AnalyticsControllerTest {
@@ -72,5 +73,29 @@ class AnalyticsControllerTest {
 
         assertThat(body).contains("\"code\":400");
         assertThat(body).contains("eventType is required");
+    }
+
+    @Test
+    void summary_afterFilterAllowsAnyLoggedInUserAndPassesFilterParams() throws Exception {
+        // standalone MockMvc 不挂 SaServletFilter：这里覆盖 controller 不再做 userId==1 限制。
+        // 未登录 401 仍由 SaTokenConfig 的全局 filter 保证（/analytics/summary 未加入 addExclude）。
+        String body = mvc.perform(get("/analytics/summary")
+                .param("days", "14")
+                .param("userId", "2"))
+            .andReturn().getResponse().getContentAsString();
+
+        assertThat(body).contains("\"code\":200");
+        verify(analyticsService).summary(14, 2L, null);
+    }
+
+    @Test
+    void recent_afterFilterAllowsAnyLoggedInUserAndPassesAnonymousFilter() throws Exception {
+        String body = mvc.perform(get("/analytics/recent")
+                .param("limit", "100")
+                .param("anonymous", "true"))
+            .andReturn().getResponse().getContentAsString();
+
+        assertThat(body).contains("\"code\":200");
+        verify(analyticsService).recent(100, null, true);
     }
 }

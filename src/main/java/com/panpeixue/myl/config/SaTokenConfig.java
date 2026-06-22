@@ -23,6 +23,8 @@ public class SaTokenConfig {
                         "/api/health",
                         "/user/login",
                         "/analytics/event",
+                        "/analytics/summary",
+                        "/analytics/recent",
                         "/ws/**",
                         "/chat.html",
                         "/uploads/**",

@@ -2,7 +2,6 @@ package com.panpeixue.myl.controller;
 
 import cn.dev33.satoken.annotation.SaIgnore;
 import cn.dev33.satoken.stp.StpUtil;
-import com.panpeixue.myl.common.BizException;
 import com.panpeixue.myl.common.Result;
 import com.panpeixue.myl.model.dto.AnalyticsEventRequest;
 import com.panpeixue.myl.model.dto.AnalyticsSummaryResponse;
@@ -41,7 +40,7 @@ public class AnalyticsController {
     public Result<AnalyticsSummaryResponse> summary(@RequestParam(defaultValue = "14") Integer days,
                                                     @RequestParam(required = false) Long userId,
                                                     @RequestParam(required = false) Boolean anonymous) {
-        requireOwner();
+        // 登录要求由 SaServletFilter 保证；这里不再限制只能 userId=1 查看。
         return Result.ok(analyticsService.summary(days, userId, anonymous));
     }
 
@@ -49,15 +48,8 @@ public class AnalyticsController {
     public Result<List<AnalyticsEvent>> recent(@RequestParam(defaultValue = "100") Integer limit,
                                                @RequestParam(required = false) Long userId,
                                                @RequestParam(required = false) Boolean anonymous) {
-        requireOwner();
+        // 登录要求由 SaServletFilter 保证；这里不再限制只能 userId=1 查看。
         return Result.ok(analyticsService.recent(limit, userId, anonymous));
-    }
-
-    private void requireOwner() {
-        long userId = StpUtil.getLoginIdAsLong();
-        if (userId != 1L) {
-            throw BizException.forbidden("No permission");
-        }
     }
 
     private Long optionalUserId(String authorization) {
