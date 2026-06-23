@@ -110,6 +110,40 @@ class PagingServiceTest {
     }
 
     @Test
+    void diaryDay_andDiaryDays_scopeAllUseSameVisibilityForSameDate() {
+        DiaryServiceImpl service = new DiaryServiceImpl(diaryMapper, sessionManager);
+        LocalDate date = LocalDate.of(2026, 6, 22);
+        Diary first = diary(1L, 1L, date.atTime(9, 0), 1);
+        Diary second = diary(2L, 1L, date.atTime(21, 0), 0);
+        when(diaryMapper.selectVisibleDatesAll(1L, null, 11)).thenReturn(List.of(date));
+        when(diaryMapper.selectVisibleEntriesByDateAll(1L, date)).thenReturn(List.of(first, second));
+
+        DiaryDaysResponse days = service.listDays(1L, "all", null, 10);
+        DiaryDayGroup day = service.getDay(1L, "all", date);
+
+        assertThat(days.getList().get(0).getEntries()).extracting("id").containsExactly(1L, 2L);
+        assertThat(day.getEntries()).extracting("id").containsExactly(1L, 2L);
+        verify(diaryMapper, times(2)).selectVisibleEntriesByDateAll(1L, date);
+    }
+
+    @Test
+    void diaryDays_scopeAllForOtherUserDoesNotSeePrivateDiary() {
+        DiaryServiceImpl service = new DiaryServiceImpl(diaryMapper, sessionManager);
+        LocalDate date = LocalDate.of(2026, 6, 22);
+        when(diaryMapper.selectVisibleDatesAll(2L, null, 11)).thenReturn(List.of(date));
+        // mapper 的 all SQL 对 user2 是：user_id=2 的全部 + 其他人的 public；user1 private 不应出现在这里。
+        when(diaryMapper.selectVisibleEntriesByDateAll(2L, date)).thenReturn(List.of(
+            diary(2L, 1L, date.atTime(10, 0), 0)
+        ));
+
+        DiaryDaysResponse days = service.listDays(2L, "all", null, 10);
+
+        assertThat(days.getList().get(0).getEntries()).extracting("id").containsExactly(2L);
+        verify(diaryMapper).selectVisibleDatesAll(2L, null, 11);
+        verify(diaryMapper).selectVisibleEntriesByDateAll(2L, date);
+    }
+
+    @Test
     void diaryDays_cursorDateUsesStrictBeforeAndDoesNotRepeatLastDay() {
         DiaryServiceImpl service = new DiaryServiceImpl(diaryMapper, sessionManager);
         LocalDate cursor = LocalDate.of(2026, 6, 10);

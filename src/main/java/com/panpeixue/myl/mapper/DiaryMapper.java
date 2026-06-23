@@ -25,19 +25,22 @@ public interface DiaryMapper {
     })
     List<Diary> selectAll();
 
-    @Select("SELECT * FROM diary WHERE user_id = #{userId} AND deleted_at IS NULL ORDER BY create_time DESC")
+    @Select("SELECT d.*, u.name as user_name FROM diary d LEFT JOIN user u ON d.user_id = u.id " +
+            "WHERE d.user_id = #{userId} AND d.deleted_at IS NULL ORDER BY d.create_time DESC")
     @Results({
         @Result(column = "user_id", property = "userId"),
         @Result(column = "is_private", property = "isPrivate"),
+        @Result(column = "user_name", property = "userName"),
         @Result(column = "deleted_at", property = "deletedAt")
     })
     List<Diary> selectByUserId(@Param("userId") Long userId);
 
     /* 不过滤 deleted_at：delete 业务需要判断不存在/已删/无权限 */
-    @Select("SELECT * FROM diary WHERE id = #{id}")
+    @Select("SELECT d.*, u.name as user_name FROM diary d LEFT JOIN user u ON d.user_id = u.id WHERE d.id = #{id}")
     @Results({
         @Result(column = "user_id", property = "userId"),
         @Result(column = "is_private", property = "isPrivate"),
+        @Result(column = "user_name", property = "userName"),
         @Result(column = "deleted_at", property = "deletedAt")
     })
     Diary selectById(@Param("id") Long id);

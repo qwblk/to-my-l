@@ -34,6 +34,7 @@ public class DiaryServiceImpl implements DiaryService {
     }
 
     @Override
+    @Transactional
     @CacheEvict(value = "diaryList", allEntries = true)
     public Diary create(Diary diary) {
         if (diary.getContent() == null || diary.getContent().isBlank()) {
@@ -45,10 +46,11 @@ public class DiaryServiceImpl implements DiaryService {
             throw new IllegalArgumentException("isPrivate must be 0 or 1");
         }
         diaryMapper.insert(diary);
+        Diary saved = diaryMapper.selectById(diary.getId());
         sessionManager.broadcast(ChatWebSocketHandler.buildJson("SYSTEM",
             "New diary posted", "diary",
             "{\"diaryId\":" + diary.getId() + ",\"userId\":" + diary.getUserId() + "}"));
-        return diary;
+        return saved == null ? diary : saved;
     }
 
     @Override
